@@ -2,17 +2,37 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "type": "npm",
-            "script": "watch",
-            "problemMatcher": "$tsc-watch",
-            "isBackground": true,
+            "label": "npm: watch",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "run",
+                "watch"
+            ],
+            "group": "build",
             "presentation": {
                 "reveal": "never"
             },
-            "group": {
-                "kind": "build",
-                "isDefault": true
-            }
+            "isBackground": true,
+            "problemMatcher": "$tsc-watch"
+        },
+        {
+            "label": "npm: compile",
+            "type": "shell",
+            "command": "npm",
+            "args": [
+                "run",
+                "compile"
+            ],
+            "group": "build"
+        },
+        {
+            "type": "npm",
+            "script": "install",
+            "group": "clean",
+            "problemMatcher": [],
+            "label": "npm: install",
+            "detail": "install dependencies from package"
         }
     ]
 }

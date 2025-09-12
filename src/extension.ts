@@ -8,14 +8,19 @@ let sidebarProvider: SidebarProvider;
 let codeAnalyzer: CodeAnalyzer;
 
 export function activate(context: vscode.ExtensionContext) {
+    console.log('CodeQuest: Extension activating...');
+    
     gameState = new GameState(context);
     sidebarProvider = new SidebarProvider(context.extensionUri, gameState);
     codeAnalyzer = new CodeAnalyzer(gameState);
 
-    // Register sidebar
-    context.subscriptions.push(
-        vscode.window.registerWebviewViewProvider('codequestSidebar', sidebarProvider)
-    );
+    console.log('CodeQuest: Created providers');
+
+    // Register sidebar - THIS IS THE CRITICAL LINE
+    const provider = vscode.window.registerWebviewViewProvider('codequest.sidebar', sidebarProvider);
+    context.subscriptions.push(provider);
+    
+    console.log('CodeQuest: Registered webview provider');
 
     // Register commands
     context.subscriptions.push(
@@ -47,6 +52,7 @@ export function activate(context: vscode.ExtensionContext) {
         sidebarProvider.refresh();
     }, 60000); // Check every minute
 
+    console.log('CodeQuest: Fully activated');
     vscode.window.showInformationMessage('🎮 CodeQuest activated! Start your coding adventure!');
 }
 
@@ -63,4 +69,6 @@ async function startBossBattle() {
     }
 }
 
-export function deactivate() {}
+export function deactivate() {
+    console.log('CodeQuest: Extension deactivated');
+}

@@ -7,7 +7,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private gameState: GameState
-    ) {}
+    ) { }
 
     resolveWebviewView(webviewView: vscode.WebviewView) {
         this._view = webviewView;
@@ -18,6 +18,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         };
 
         this.refresh();
+
+        // Add this line for debugging
+        console.log('CodeQuest: WebView resolved successfully');
 
         // Handle messages from webview
         webviewView.webview.onDidReceiveMessage(data => {
@@ -44,7 +47,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private _getHtmlForWebview() {
         const stats = this.gameState.getStats();
         const xpPercentage = (stats.xp / stats.xpToNextLevel) * 100;
-        
+
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -186,17 +189,17 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             <div class="boss-fill" style="width: ${(stats.currentBossBattle.currentLines / stats.currentBossBattle.targetLines) * 100}%"></div>
         </div>
         <div>${stats.currentBossBattle.currentLines}/${stats.currentBossBattle.targetLines} lines</div>
-        ${stats.currentBossBattle.currentLines >= stats.currentBossBattle.targetLines ? 
-            '<button class="button" onclick="completeBossBattle()">🎉 Claim Victory!</button>' : ''
-        }
+        ${stats.currentBossBattle.currentLines >= stats.currentBossBattle.targetLines ?
+                    '<button class="button" onclick="completeBossBattle()">🎉 Claim Victory!</button>' : ''
+                }
     </div>
     ` : '<button class="button" onclick="startBossBattle()">🐉 Start Boss Battle</button>'}
 
-    ${stats.level >= 5 && stats.dailyStreak >= 7 ? 
-        '<div class="achievement">🏅 Week Warrior - 7 day streak achieved!</div>' : ''}
+    ${stats.level >= 5 && stats.dailyStreak >= 7 ?
+                '<div class="achievement">🏅 Week Warrior - 7 day streak achieved!</div>' : ''}
     
-    ${stats.maxCombo >= 50 ? 
-        '<div class="achievement">🔥 Combo Master - 50x combo achieved!</div>' : ''}
+    ${stats.maxCombo >= 50 ?
+                '<div class="achievement">🔥 Combo Master - 50x combo achieved!</div>' : ''}
 
     <button class="button" onclick="resetStats()" style="background: #dc2626; margin-top: 20px;">
         🔄 Reset Stats

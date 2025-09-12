@@ -6,8 +6,12 @@
   "engines": {
     "vscode": "^1.74.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["onStartupFinished"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
@@ -27,15 +31,6 @@
         "category": "CodeQuest"
       }
     ],
-    "views": {
-      "explorer": [
-        {
-          "id": "codequestSidebar",
-          "name": "CodeQuest",
-          "when": "true"
-        }
-      ]
-    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -44,12 +39,24 @@
           "icon": "$(game)"
         }
       ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "codequest.sidebar",
+          "name": "🎮 CodeQuest",
+          "when": "true"
+        }
+      ]
     }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src --ext ts",
+    "test": "node ./out/test/runTest.js"
   },
   "devDependencies": {
     "@types/vscode": "^1.74.0",
