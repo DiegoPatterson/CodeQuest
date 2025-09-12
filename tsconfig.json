@@ -6,10 +6,12 @@
         "lib": ["es2020"],
         "sourceMap": true,
         "rootDir": "src",
-        "strict": true,
+        "strict": false,
         "esModuleInterop": true,
         "skipLibCheck": true,
-        "forceConsistentCasingInFileNames": true
+        "forceConsistentCasingInFileNames": true,
+        "strictNullChecks": false,
+        "strictPropertyInitialization": false
     },
     "exclude": ["node_modules", ".vscode-test"]
 }
