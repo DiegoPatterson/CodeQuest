@@ -3,6 +3,10 @@
   "displayName": "CodeQuest - Gamify Your Coding",
   "description": "Turn VS Code into an RPG adventure with levels, streaks, and boss battles!",
   "version": "0.0.1",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/username/codequest"
+  },
   "engines": {
     "vscode": "^1.74.0"
   },
@@ -10,7 +14,9 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:codequest.sidebar"
+    "onView:codequest.sidebar",
+    "onView:codequest.webview",
+    "*"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -44,7 +50,13 @@
       "codequest": [
         {
           "id": "codequest.sidebar",
-          "name": "🎮 CodeQuest",
+          "name": "📊 Game Stats",
+          "when": "true"
+        },
+        {
+          "id": "codequest.webview",
+          "name": "🖼️ Knight Display",
+          "type": "webview",
           "when": "true"
         }
       ]

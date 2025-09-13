@@ -3,8 +3,6 @@ import { GameState } from './gameState';
 import { VisualEngine } from './visualEngine';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'codequest.webview';
-    
     private _view?: vscode.WebviewView;
     private visualEngine: VisualEngine;
     private animationFrame: number = 0;
@@ -34,14 +32,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
 
     private startImageAnimation() {
-        // Cycle through images every 5 seconds for slower animation
+        // Cycle through images every 0.5 seconds for faster animation
         this.animationTimer = setInterval(() => {
             const visualState = this.visualEngine.getVisualState();
             
-            if (visualState.playerState === 'boss_battle') {
-                // Boss battle: cycle between 2 dragon images (0, 1) - HIGHEST PRIORITY
-                this.animationFrame = (this.animationFrame + 1) % 2;
-            } else if (visualState.useImages) {
+            if (visualState.useImages) {
                 // Idle state: cycle between 2 images (0, 1)
                 this.animationFrame = (this.animationFrame + 1) % 2;
             } else if (visualState.playerState === 'fighting') {
@@ -50,12 +45,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             }
             
             this.refresh();
-        }, 5000); // 5 second intervals
+        }, 500); // 0.5 second intervals
     }
 
     resolveWebviewView(webviewView: vscode.WebviewView) {
         console.log('CodeQuest: resolveWebviewView called! This means webview is working!');
-        vscode.window.showInformationMessage('🎮 CodeQuest: WebView resolveWebviewView called!');
         this._view = webviewView;
 
         webviewView.webview.options = {
@@ -133,28 +127,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         
         console.log('CodeQuest: Visual state - idle:', isIdle, 'fighting:', isFighting, 'boss:', isBossBattle);
         
-        if (isBossBattle) {
-            // Boss Battle state: cycle between 2 knight vs dragon images - HIGHEST PRIORITY
-            const bossImages = [
-                this._view?.webview.asWebviewUri(
-                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Boss', 'Knight V Dragon 1.png')
-                ),
-                this._view?.webview.asWebviewUri(
-                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Boss', 'Knight V Dragon 3.png')
-                )
-            ];
-            currentImage = bossImages[this.animationFrame % 2]?.toString() || '';
-            console.log('CodeQuest: Boss battle image selected:', currentImage);
-            imageSection = `
-                <div class="game-section boss-section">
-                    <h3>🐉 BOSS BATTLE! 🐉</h3>
-                    <img src="${currentImage}" alt="Knight Fighting Dragon" class="game-image" />
-                    <p>⚔️ EPIC DRAGON BATTLE! ⚔️</p>
-                    <p>🔥 Combo: ${stats.combo}x 🔥</p>
-                    <p><small>Debug: Frame ${this.animationFrame}, Image: ${currentImage ? 'Found' : 'Missing'}</small></p>
-                </div>
-            `;
-        } else if (isIdle) {
+        if (isIdle) {
             // Idle state: cycle between 2 knight images
             const idleImages = [
                 this._view?.webview.asWebviewUri(
@@ -173,9 +146,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     <p>🔥 Resting by the campfire... 🔥</p>
                     <p>💤 Ready for your next adventure! 💤</p>
                     <p><small>Debug: Frame ${this.animationFrame}, Image: ${currentImage ? 'Found' : 'Missing'}</small></p>
-                    <div style="margin-top: 15px;">
-                        <button onclick="startBossBattle()" style="background: #9400D3; color: white; border: none; padding: 8px 12px; border-radius: 5px; margin: 5px; cursor: pointer; font-size: 12px;">🐉 Start Boss Battle</button>
-                    </div>
                 </div>
             `;
         } else if (isFighting) {
@@ -200,9 +170,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     <p>🗡️ Fighting slimes! 🗡️</p>
                     <p>🔥 Combo: ${stats.combo}x 🔥</p>
                     <p><small>Debug: Frame ${this.animationFrame}, Image: ${currentImage ? 'Found' : 'Missing'}</small></p>
-                    <div style="margin-top: 15px;">
-                        <button onclick="startBossBattle()" style="background: #9400D3; color: white; border: none; padding: 8px 12px; border-radius: 5px; margin: 5px; cursor: pointer; font-size: 12px;">🐉 Start Boss Battle</button>
-                    </div>
                 </div>
             `;
         } else {
@@ -213,22 +180,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             console.log('CodeQuest: Test image URI:', testImage?.toString());
             imageSection = `
                 <div class="game-section">
-                    <h3>🎮 CodeQuest Knight Display - TEST MODE 🎮</h3>
-                    <div style="background: #444; padding: 20px; margin: 10px; border-radius: 8px;">
-                        <p>✅ WebView is working!</p>
-                        <p>🔧 Loading image test...</p>
-                        <img src="${testImage}" alt="Knight" class="game-image" 
-                            onload="this.nextElementSibling.style.display='block'; this.nextElementSibling.innerHTML='✅ Image loaded successfully!'" 
-                            onerror="this.nextElementSibling.style.display='block'; this.nextElementSibling.innerHTML='❌ Image failed to load';" />
-                        <div style="display:none; color: yellow; font-weight: bold; margin-top: 10px;"></div>
-                    </div>
-                    <p><strong>State:</strong> ${visualState.playerState}</p>
-                    <p><strong>Frame:</strong> ${this.animationFrame}</p>
-                    <p><strong>Extension URI:</strong> ${this._extensionUri.toString()}</p>
-                    <p><strong>Image URI:</strong> ${testImage?.toString() || 'undefined'}</p>
-                    <div style="margin-top: 20px;">
-                        <button onclick="startBossBattle()" style="background: #9400D3; color: white; border: none; padding: 10px 15px; border-radius: 5px; margin: 5px; cursor: pointer;">🐉 Test Boss Battle</button>
-                    </div>
+                    <h3>🎮 CodeQuest Active 🎮</h3>
+                    <img src="${testImage}" alt="Test Knight" class="game-image" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                    <div style="display:none; color: red;">❌ Image failed to load: ${testImage}</div>
+                    <p>Type to see combat animations!</p>
+                    <p><small>State: ${visualState.playerState} | Frame: ${this.animationFrame}</small></p>
                 </div>
             `;
         }
@@ -262,18 +218,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             background: rgba(0,100,200,0.2);
             border: 1px solid rgba(0,100,200,0.5);
         }
-        .idle-section {
-            background: rgba(139, 69, 19, 0.3);
-            border: 2px solid #8B4513;
-        }
-        .combat-section {
-            background: rgba(220, 20, 60, 0.3);
-            border: 2px solid #DC143C;
-        }
-        .boss-section {
-            background: rgba(148, 0, 211, 0.3);
-            border: 2px solid #9400D3;
-        }
     </style>
 </head>
 <body>
@@ -283,12 +227,204 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     <p><strong>Level:</strong> ${stats.level}</p>
     <p><strong>Combo:</strong> ${stats.combo}x</p>
     <p><strong>Extension URI:</strong> ${this._extensionUri.toString()}</p>
+</body>
+</html>`;
+    }
+}
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeQuest</title>
+    <style>
+        body {
+            font-family: var(--vscode-font-family);
+            padding: 10px;
+            color: var(--vscode-foreground);
+            background: var(--vscode-editor-background);
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .level {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+        .game-image {
+            width: 100%;
+            max-width: 300px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            margin: 20px 0;
+        }
+        .game-section {
+            text-align: center;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 10px 0;
+        }
+        .idle-section {
+            background: rgba(139, 69, 19, 0.3); /* Brown for campfire */
+            border: 2px solid #8B4513;
+        }
+        .combat-section {
+            background: rgba(220, 20, 60, 0.3); /* Red for combat */
+            border: 2px solid #DC143C;
+        }
+        .boss-section {
+            background: rgba(148, 0, 211, 0.3); /* Purple for boss */
+            border: 2px solid #9400D3;
+        }
+        .xp-bar {
+            width: 100%;
+            height: 20px;
+            background: #333;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+        .xp-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #4CAF50, #8BC34A);
+            width: ${xpPercentage}%;
+            transition: width 0.3s ease;
+        }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+            padding: 5px 0;
+            border-bottom: 1px solid #333;
+        }
+        .stat-label {
+            font-weight: bold;
+        }
+        .combo {
+            color: ${stats.combo > 10 ? '#ff6b35' : stats.combo > 5 ? '#ffd23f' : '#ffffff'};
+            font-weight: bold;
+        }
+        .boss-battle {
+            background: #2d1b69;
+            border: 2px solid #8b5cf6;
+            border-radius: 8px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .boss-name {
+            color: #fbbf24;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .boss-progress {
+            width: 100%;
+            height: 15px;
+            background: #1f2937;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .boss-fill {
+            height: 100%;
+            background: linear-gradient(45deg, #ef4444, #dc2626);
+            transition: width 0.3s ease;
+        }
+        .button {
+            background: #0d7377;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+            width: calc(100% - 10px);
+        }
+        .button:hover {
+            background: #14a085;
+        }
+        .streak {
+            color: #f59e0b;
+            font-size: 18px;
+        }
+        .achievement {
+            background: #065f46;
+            border-left: 4px solid #10b981;
+            padding: 8px;
+            margin: 5px 0;
+            border-radius: 0 4px 4px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="level">⚔️ Level ${stats.level} ⚔️</div>
+        <div class="xp-bar">
+            <div class="xp-fill"></div>
+        </div>
+        <div>${stats.xp}/${stats.xpToNextLevel} XP</div>
+    </div>
+
+    ${imageSection}
+
+    <div class="stat-row">
+        <span class="stat-label">🔥 Daily Streak:</span>
+        <span class="streak">${stats.dailyStreak} days</span>
+    </div>
+
+    <div class="stat-row">
+        <span class="stat-label">⚡ Current Combo:</span>
+        <span class="combo">${stats.combo}x</span>
+    </div>
+
+    <div class="stat-row">
+        <span class="stat-label">🏆 Best Combo:</span>
+        <span>${stats.maxCombo}x</span>
+    </div>
+
+    <div class="stat-row">
+        <span class="stat-label">📝 Lines Written:</span>
+        <span>${stats.totalLinesWritten}</span>
+    </div>
+
+    <div class="stat-row">
+        <span class="stat-label">🐉 Bosses Defeated:</span>
+        <span>${stats.bossBattlesWon}</span>
+    </div>
+
+    ${stats.currentBossBattle ? `
+    <div class="boss-battle">
+        <div class="boss-name">🐉 ${stats.currentBossBattle.name}</div>
+        <div class="boss-progress">
+            <div class="boss-fill" style="width: ${(stats.currentBossBattle.currentLines / stats.currentBossBattle.targetLines) * 100}%"></div>
+        </div>
+        <div>${stats.currentBossBattle.currentLines}/${stats.currentBossBattle.targetLines} lines</div>
+        ${stats.currentBossBattle.currentLines >= stats.currentBossBattle.targetLines ?
+                    '<button class="button" onclick="completeBossBattle()">🎉 Claim Victory!</button>' : ''
+                }
+    </div>
+    ` : '<button class="button" onclick="startBossBattle()">🐉 Start Boss Battle</button>'}
+
+    ${stats.level >= 5 && stats.dailyStreak >= 7 ?
+                '<div class="achievement">🏅 Week Warrior - 7 day streak achieved!</div>' : ''}
     
+    ${stats.maxCombo >= 50 ?
+                '<div class="achievement">🔥 Combo Master - 50x combo achieved!</div>' : ''}
+
+    <button class="button" onclick="resetStats()" style="background: #dc2626; margin-top: 20px;">
+        🔄 Reset Stats
+    </button>
+
     <script>
         const vscode = acquireVsCodeApi();
         
         function startBossBattle() {
             vscode.postMessage({ type: 'startBossBattle' });
+        }
+        
+        function completeBossBattle() {
+            vscode.postMessage({ type: 'completeBossBattle' });
+        }
+        
+        function resetStats() {
+            vscode.postMessage({ type: 'resetStats' });
         }
     </script>
 </body>

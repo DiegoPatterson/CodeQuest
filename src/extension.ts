@@ -11,6 +11,12 @@ let codeAnalyzer: CodeAnalyzer;
 let treeProvider: GameStatsTreeProvider;
 
 export function activate(context: vscode.ExtensionContext) {
+    console.log('🔥 CodeQuest: Extension activate function called!');
+    console.log('🔥 CodeQuest: Extension URI:', context.extensionUri.toString());
+    
+    // Force a notification to appear to confirm activation
+    vscode.window.showInformationMessage('🔥 CodeQuest ACTIVATE function called!');
+    
     console.log('CodeQuest: Extension activating...');
     
     gameState = new GameState(context);
@@ -42,10 +48,11 @@ export function activate(context: vscode.ExtensionContext) {
         console.error('CodeQuest: Failed to register TreeDataProvider:', error);
     }
 
-    // Also try webview provider (in case it works)
+    // Register webview provider for knight display
     try {
+        console.log(`CodeQuest: Attempting to register webview provider for ${SidebarProvider.viewType}...`);
         const provider = vscode.window.registerWebviewViewProvider(
-            'codequest.webview', 
+            SidebarProvider.viewType, 
             sidebarProvider,
             {
                 webviewOptions: {
@@ -54,18 +61,14 @@ export function activate(context: vscode.ExtensionContext) {
             }
         );
         context.subscriptions.push(provider);
-        console.log('CodeQuest: Successfully registered webview provider for codequest.webview');
+        console.log(`CodeQuest: Successfully registered webview provider for ${SidebarProvider.viewType}`);
         
-        // Also register a test provider to see if basic webview works
-        const testProvider = vscode.window.registerWebviewViewProvider(
-            'codequest.test',
-            new TestWebviewProvider()
-        );
-        context.subscriptions.push(testProvider);
-        console.log('CodeQuest: Registered test webview provider');
+        // Force notification to confirm registration
+        vscode.window.showInformationMessage(`🔥 WebView Provider REGISTERED for ${SidebarProvider.viewType}!`);
         
     } catch (error) {
         console.error('CodeQuest: Failed to register webview provider:', error);
+        vscode.window.showErrorMessage(`CodeQuest webview registration failed: ${error}`);
     }
 
     // Register commands

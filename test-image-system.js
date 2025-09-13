@@ -1,39 +1,49 @@
-// 🎮 ENHANCED CodeQuest - Now with REAL Knight Images!
+// 🎮 FULLY IMAGE-BASED CodeQuest - ASCII Replaced with Real Images!
 // 
-// ✅ NEW IMAGE FEATURES:
-// 🖼️ Real pixel art knight images for idle state
-// 🔄 Alternating between your two knight PNG files every 2 seconds
-// 🏰 Beautiful idle scene with actual images instead of ASCII
-// 📱 Images display in the webview sidebar when idle
+// ✅ COMPLETE IMAGE SYSTEM:
+// 🖼️ IDLE: Cycles between "pixel art of a knight 1.png" & "knight 2.png" every 0.5 seconds
+// ⚔️ COMBAT: Cycles through "Knight V Slime 1.png", "2.png", "3.png" every 0.5 seconds  
+// 🏰 WebView sidebar shows REAL images instead of ASCII art
+// � TreeProvider still shows ASCII stats for performance
 
-function testImageBasedIdleSystem() {
-    console.log("Testing IMAGE-BASED idle system!");
+function testCompleteImageSystem() {
+    console.log("Testing COMPLETE image-based system!");
     
-    // 🔥 BUILD A COMBO: Type these words rapidly
+    // 🔥 BUILD A COMBO: Type these words rapidly to see combat images
     const epicCoding = "amazing";
     const realImages = "working";
     const knightAnimation = "beautiful";
+    const slimeFighting = "fantastic";
+    const imageSystem = "complete";
     
     // 🛑 STOP TYPING HERE AND WATCH THE WEBVIEW SIDEBAR:
-    // 1. Combo decreases every 3 seconds (watch TreeProvider)
-    // 2. Knight stays fighting until combo = 0
-    // 3. After 30 seconds + combo = 0, REAL knight images appear!
-    // 4. Images from Assets/Idle/ folder alternate every 2 seconds
-    // 5. Beautiful pixel art knight at campfire scene
+    // 
+    // IMMEDIATE EFFECT (while typing/combo active):
+    // ⚔️ Knight V Slime images cycling through 1.png → 2.png → 3.png every 0.5 seconds
+    // 🗡️ Red combat section with real battle images
+    // 
+    // AFTER 30 SECONDS + COMBO = 0:
+    // 🏰 Knight idle images cycling between 1.png → 2.png every 0.5 seconds  
+    // 🔥 Brown campfire section with resting knight images
     
     return {
-        status: "Testing real knight images",
-        imageSource: "Assets/Idle/pixel art of a knight.png & knight 2.png",
-        animation: "2-second alternating image cycle",
-        display: "WebView sidebar (not TreeProvider for images)"
+        status: "COMPLETE image replacement system",
+        idleImages: "knight 1.png ↔ knight 2.png (0.5s cycle)",
+        combatImages: "Knight V Slime 1.png → 2.png → 3.png (0.5s cycle)",
+        display: "WebView sidebar with real PNG files",
+        noMoreASCII: "ASCII completely replaced with images!"
     };
 }
 
 // 🧪 TESTING INSTRUCTIONS:
-// 1. Make sure VS Code can see your webview sidebar (not just TreeProvider)
-// 2. Start typing rapidly to build combo
-// 3. Stop typing and wait for combo to reach 0
-// 4. After 30 seconds, check the WEBVIEW sidebar for real knight images!
-// 5. Watch the knight images alternate every 2 seconds
+// 1. Make sure to check the WEBVIEW sidebar (not TreeProvider)
+// 2. Start typing to see combat images cycling through 3 frames
+// 3. Stop typing and wait for idle images (2 frames alternating)
+// 4. Enjoy your real pixel art knight in action!
 
-// 📍 IMPORTANT: Images show in WEBVIEW sidebar, ASCII still in TreeProvider!
+// 🎨 YOUR IMAGES ARE NOW LIVE:
+// ✅ Assets/Idle/pixel art of a knight 1.png
+// ✅ Assets/Idle/pixel art of a knight 2.png  
+// ✅ Assets/Slime/Knight V Slime 1.png
+// ✅ Assets/Slime/Knight V Slime 2.png
+// ✅ Assets/Slime/Knight V Slime 3.png

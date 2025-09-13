@@ -75,12 +75,25 @@ export class VisualEngine {
 
         const stats = this.gameState.getStats();
         
-        // Check if we should go idle (30 second delay OR combo is 0)
+        // Check if we should go idle (30 second delay AND combo is 0)
         const timeSinceLastTyping = lastTypingTime > 0 ? now - lastTypingTime : 999999;
         const shouldShowIdle = timeSinceLastTyping > this.IDLE_DELAY && stats.combo === 0;
         
-        console.log(`CodeQuest Visual: lastTyping=${lastTypingTime}, timeSince=${timeSinceLastTyping}, combo=${stats.combo}, shouldIdle=${shouldShowIdle}`);
+        // Update visual state for webview
+        if (stats.currentBossBattle) {
+            this.visualState.playerState = 'boss_battle';
+            this.visualState.useImages = true; // Boss battles should show dragon images
+        } else if (shouldShowIdle) {
+            this.visualState.playerState = 'idle';
+            this.visualState.useImages = true;
+        } else {
+            this.visualState.playerState = 'fighting';
+            this.visualState.useImages = false; // Fighting will show images in webview regardless
+        }
         
+        console.log(`CodeQuest Visual: lastTyping=${lastTypingTime}, timeSince=${timeSinceLastTyping}, combo=${stats.combo}, state=${this.visualState.playerState}`);
+        
+        // Return ASCII for TreeProvider (this is still used for TreeProvider display)
         if (stats.currentBossBattle) {
             return this.renderBossBattle(stats);
         } else if (!shouldShowIdle) {

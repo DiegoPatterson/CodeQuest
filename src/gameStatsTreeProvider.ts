@@ -31,9 +31,6 @@ export class GameStatsTreeProvider implements vscode.TreeDataProvider<GameStatIt
             const stats = this.gameState.getStats();
             console.log('CodeQuest: Got stats:', stats);
             
-            // Get epic visual from visual engine
-            const visualLines = this.visualEngine.updateVisual(this.lastWordsTyped);
-            
             // Calculate progress bars using Unicode blocks
             const xpPercentage = Math.floor((stats.xp / stats.xpToNextLevel) * 10);
             const xpBar = '█'.repeat(xpPercentage) + '▒'.repeat(10 - xpPercentage);
@@ -49,20 +46,10 @@ export class GameStatsTreeProvider implements vscode.TreeDataProvider<GameStatIt
             if (stats.level >= 50) levelDisplay = `👑 LEGEND Level ${stats.level}`;
             else if (stats.level >= 25) levelDisplay = `💎 MASTER Level ${stats.level}`;
             else if (stats.level >= 10) levelDisplay = `⭐ EXPERT Level ${stats.level}`;
-            
+
             const items: GameStatItem[] = [];
             
-            // Add visual scene first
-            visualLines.forEach((line, index) => {
-                if (line.trim()) {
-                    items.push(new GameStatItem(line, vscode.TreeItemCollapsibleState.None));
-                }
-            });
-            
-            // Add separator
-            items.push(new GameStatItem("═══════════════════", vscode.TreeItemCollapsibleState.None));
-            
-            // Add stats
+            // Only show stats - NO ASCII art
             items.push(new GameStatItem(levelDisplay, vscode.TreeItemCollapsibleState.None));
             items.push(new GameStatItem(`⭐ XP: ${stats.xp}/${stats.xpToNextLevel} ${xpBar}`, vscode.TreeItemCollapsibleState.None));
             items.push(new GameStatItem(comboDisplay, vscode.TreeItemCollapsibleState.None));
