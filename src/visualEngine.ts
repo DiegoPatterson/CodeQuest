@@ -59,7 +59,36 @@ export class VisualEngine {
     }
 
     getVisualState(): VisualState {
-        return this.visualState;
+        // Ensure state is up to date by refreshing it
+        this.refreshVisualState();
+        const state = this.visualState;
+        console.log('VisualEngine: getVisualState called, returning:', state);
+        return state;
+    }
+
+    private refreshVisualState(): void {
+        const stats = this.gameState.getStats();
+        const lastTypingTime = this.gameState.getLastTypingTime();
+        const now = Date.now();
+        
+        // Check if we should go idle (30 second delay AND combo is 0)
+        const timeSinceLastTyping = lastTypingTime > 0 ? now - lastTypingTime : 999999;
+        const shouldShowIdle = timeSinceLastTyping > this.IDLE_DELAY && stats.combo === 0;
+        
+        // Update visual state for webview
+        if (stats.currentBossBattle) {
+            console.log('VisualEngine: Boss battle detected!', stats.currentBossBattle);
+            this.visualState.playerState = 'boss_battle';
+            this.visualState.useImages = true; // Boss battles should show dragon images
+        } else if (shouldShowIdle) {
+            this.visualState.playerState = 'idle';
+            this.visualState.useImages = true;
+        } else {
+            this.visualState.playerState = 'fighting';
+            this.visualState.useImages = false; // Fighting will show images in webview regardless
+        }
+        
+        console.log(`CodeQuest Visual: state=${this.visualState.playerState}, useImages=${this.visualState.useImages}`);
     }
 
     updateVisual(wordsTyped: number, hasAI: boolean = false): string[] {
@@ -81,6 +110,7 @@ export class VisualEngine {
         
         // Update visual state for webview
         if (stats.currentBossBattle) {
+            console.log('VisualEngine: Boss battle detected!', stats.currentBossBattle);
             this.visualState.playerState = 'boss_battle';
             this.visualState.useImages = true; // Boss battles should show dragon images
         } else if (shouldShowIdle) {

@@ -207,6 +207,8 @@ export class GameState {
             currentLines: 0,
             completed: false
         };
+        console.log('GameState: Boss battle started!');
+        console.log('GameState: Boss battle details:', this.stats.currentBossBattle);
         this.saveStats();
     }
 

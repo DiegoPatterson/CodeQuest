@@ -127,31 +127,54 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         const isFighting = visualState.playerState === 'fighting';
         const isBossBattle = visualState.playerState === 'boss_battle';
         
+        console.log('CodeQuest: State check debug:');
+        console.log('  - visualState.playerState:', visualState.playerState);
+        console.log('  - visualState.useImages:', visualState.useImages);
+        console.log('  - isIdle:', isIdle);
+        console.log('  - isFighting:', isFighting);
+        console.log('  - isBossBattle:', isBossBattle);
+        
         // Always show some image to test webview functionality
         let currentImage = '';
         let imageSection = '';
         
         console.log('CodeQuest: Visual state - idle:', isIdle, 'fighting:', isFighting, 'boss:', isBossBattle);
+        console.log('CodeQuest: About to choose image section...');
         
         if (isBossBattle) {
+            console.log('CodeQuest: ENTERING BOSS BATTLE SECTION!');
             // Boss Battle state: cycle between 2 knight vs dragon images - HIGHEST PRIORITY
             const bossImages = [
                 this._view?.webview.asWebviewUri(
                     vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Boss', 'Knight V Dragon 1.png')
                 ),
                 this._view?.webview.asWebviewUri(
-                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Boss', 'Knight V Dragon 3.png')
+                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Boss', 'Knight V Dragon 2.png')
                 )
             ];
             currentImage = bossImages[this.animationFrame % 2]?.toString() || '';
-            console.log('CodeQuest: Boss battle image selected:', currentImage);
+            console.log('CodeQuest: Boss battle mode detected!');
+            console.log('CodeQuest: Animation frame:', this.animationFrame);
+            console.log('CodeQuest: Boss images array:', bossImages.map(img => img?.toString()));
+            console.log('CodeQuest: Selected boss image:', currentImage);
             imageSection = `
                 <div class="game-section boss-section">
                     <h3>🐉 BOSS BATTLE! 🐉</h3>
-                    <img src="${currentImage}" alt="Knight Fighting Dragon" class="game-image" />
+                    <img src="${currentImage}" alt="Knight Fighting Dragon" class="game-image" 
+                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                    <div style="display:none; color: red; padding: 10px; background: rgba(255,0,0,0.1);">
+                        ❌ Image failed to load: ${currentImage}
+                    </div>
                     <p>⚔️ EPIC DRAGON BATTLE! ⚔️</p>
                     <p>🔥 Combo: ${stats.combo}x 🔥</p>
-                    <p><small>Debug: Frame ${this.animationFrame}, Image: ${currentImage ? 'Found' : 'Missing'}</small></p>
+                    <div style="font-size: 10px; color: #888; margin: 10px; padding: 10px; background: rgba(0,0,0,0.2);">
+                        <strong>Debug Info:</strong><br>
+                        Frame: ${this.animationFrame}<br>
+                        Image Found: ${currentImage ? 'Yes' : 'No'}<br>
+                        Image URL: ${currentImage}<br>
+                        Extension URI: ${this._extensionUri.toString()}<br>
+                        Boss Battle Active: ${isBossBattle ? 'Yes' : 'No'}
+                    </div>
                 </div>
             `;
         } else if (isIdle) {
