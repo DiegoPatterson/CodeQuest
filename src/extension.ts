@@ -109,6 +109,12 @@ export function activate(context: vscode.ExtensionContext) {
             sidebarProvider.refresh();
             treeProvider.refresh();
             vscode.window.showInformationMessage('🗡️ Wizard session terminated! Back to knight mode.');
+        }),
+        vscode.commands.registerCommand('codequest.toggleEnabled', () => {
+            const isEnabled = gameState.toggleEnabled();
+            sidebarProvider.refresh();
+            treeProvider.refresh();
+            // Message is shown in the toggleEnabled method
         })
     );
 

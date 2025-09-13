@@ -35,6 +35,7 @@ export class GameState {
     private refreshCallback: (() => void) | null = null;
     private multiplierCallback: ((combo: number) => void) | null = null;
     private impactFrameCallback: (() => void) | null = null;
+    private enabled: boolean = true; // Extension enabled state
     
     // Rate limiting for combo increments
     private lastComboIncrement: number = 0;
@@ -61,6 +62,7 @@ export class GameState {
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
         this.loadStats();
+        this.loadEnabledState();
         this.startComboDecaySystem();
     }
 
@@ -74,6 +76,37 @@ export class GameState {
 
     setImpactFrameCallback(callback: () => void) {
         this.impactFrameCallback = callback;
+    }
+
+    // Extension enable/disable functionality
+    isEnabled(): boolean {
+        return this.enabled;
+    }
+
+    toggleEnabled(): boolean {
+        this.enabled = !this.enabled;
+        this.saveEnabledState();
+        
+        if (this.enabled) {
+            vscode.window.showInformationMessage('🎮 CodeQuest RPG enabled! Time to level up!');
+        } else {
+            vscode.window.showInformationMessage('😴 CodeQuest RPG disabled. Coding in stealth mode.');
+        }
+        
+        // Trigger UI refresh
+        if (this.refreshCallback) {
+            this.refreshCallback();
+        }
+        
+        return this.enabled;
+    }
+
+    private loadEnabledState() {
+        this.enabled = this.context.globalState.get('codequest.enabled', true);
+    }
+
+    private saveEnabledState() {
+        this.context.globalState.update('codequest.enabled', this.enabled);
     }
 
     // Wizard session management
@@ -172,6 +205,8 @@ export class GameState {
     }
 
     addXP(amount: number, reason: string = '') {
+        if (!this.enabled) return; // Skip if extension is disabled
+        
         this.stats.xp += amount;
         
         // Check for level up
@@ -213,6 +248,8 @@ export class GameState {
     }
 
     incrementCombo() {
+        if (!this.enabled) return; // Skip if extension is disabled
+        
         const now = Date.now();
         
         // Rate limiting: prevent combo spam from large text insertions
@@ -287,6 +324,8 @@ export class GameState {
     }
 
     addLinesWritten(lines: number) {
+        if (!this.enabled) return; // Skip if extension is disabled
+        
         this.stats.totalLinesWritten += lines;
         this.addXP(lines * 2, `(${lines} lines written)`);
         this.incrementCombo();
@@ -302,6 +341,8 @@ export class GameState {
     }
 
     detectCopyPaste(lines: number) {
+        if (!this.enabled) return; // Skip if extension is disabled
+        
         this.addXP(Math.floor(lines * 0.5), '(summoned help)');
         vscode.window.showInformationMessage(`🧙‍♂️ You summoned help! +${Math.floor(lines * 0.5)} XP`);
         this.breakCombo();

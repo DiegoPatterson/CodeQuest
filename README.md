@@ -12,6 +12,7 @@ Transform your coding into an RPG adventure with levels, streaks, boss battles, 
 - 🧙‍♂️ **Wizard system** - Random appearances with 15-second idle timer
 - 📊 **Beautiful sidebar** - Real-time stats with knight/wizard animations
 - 🎯 **Rate limiting** - Smart detection prevents spam and copy-paste abuse
+- 🎛️ **Toggle on/off** - Disable RPG mode when you need distraction-free coding
 
 ## Installation
 
@@ -59,6 +60,7 @@ Transform your coding into an RPG adventure with levels, streaks, boss battles, 
 
 ## Commands
 Access these via Command Palette (`Ctrl+Shift+P`):
+- `CodeQuest: Toggle RPG Mode` - **Enable/disable the extension** (keep VS Code performance when needed)
 - `CodeQuest: Start Boss Battle` - Begin a coding challenge
 - `CodeQuest: Complete Boss Battle` - Mark current battle as complete
 - `CodeQuest: Kill Boss Battle` - Cancel current battle

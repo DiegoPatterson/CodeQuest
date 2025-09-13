@@ -116,6 +116,11 @@ export class GameStatsTreeProvider implements vscode.TreeDataProvider<GameStatIt
 
             const items: GameStatItem[] = [];
             
+            // Show extension status first
+            const enabledStatus = this.gameState.isEnabled() ? 
+                "🎮 RPG Mode: ON" : "😴 RPG Mode: OFF";
+            items.push(new GameStatItem(enabledStatus, vscode.TreeItemCollapsibleState.None));
+            
             // Only show stats - NO ASCII art
             items.push(new GameStatItem(levelDisplay, vscode.TreeItemCollapsibleState.None));
             items.push(new GameStatItem(`⭐ XP: ${stats.xp}/${stats.xpToNextLevel} ${xpBar}`, vscode.TreeItemCollapsibleState.None));

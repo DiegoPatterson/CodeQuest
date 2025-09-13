@@ -50,6 +50,12 @@
         "command": "codequest.killWizard",
         "title": "Kill Wizard",
         "category": "CodeQuest"
+      },
+      {
+        "command": "codequest.toggleEnabled",
+        "title": "Toggle RPG Mode",
+        "category": "CodeQuest",
+        "icon": "$(settings-gear)"
       }
     ],
     "viewsContainers": {

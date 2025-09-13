@@ -18,7 +18,12 @@ describe('GameState', () => {
     // Create a mock extension context
     mockContext = {
       globalState: {
-        get: jest.fn(),
+        get: jest.fn().mockImplementation((key: string, defaultValue: any) => {
+          if (key === 'codequest.enabled') {
+            return true; // Default enabled state
+          }
+          return defaultValue;
+        }),
         update: jest.fn()
       }
     };
@@ -285,6 +290,51 @@ describe('GameState', () => {
       gameState.incrementCombo();
       
       expect(mockImpactFrameCallback).toHaveBeenCalled();
+    });
+  });
+
+  describe('Extension Toggle', () => {
+    test('should start enabled by default', () => {
+      expect(gameState.isEnabled()).toBe(true);
+    });
+
+    test('should toggle enabled state', () => {
+      expect(gameState.isEnabled()).toBe(true);
+      
+      const newState = gameState.toggleEnabled();
+      expect(newState).toBe(false);
+      expect(gameState.isEnabled()).toBe(false);
+      
+      const toggleBack = gameState.toggleEnabled();
+      expect(toggleBack).toBe(true);
+      expect(gameState.isEnabled()).toBe(true);
+    });
+
+    test('should not process XP when disabled', () => {
+      gameState.toggleEnabled(); // Disable
+      const initialXP = gameState.getStats().xp;
+      
+      gameState.addXP(100, 'test');
+      
+      expect(gameState.getStats().xp).toBe(initialXP); // Should not change
+    });
+
+    test('should not process lines when disabled', () => {
+      gameState.toggleEnabled(); // Disable
+      const initialLines = gameState.getStats().totalLinesWritten;
+      
+      gameState.addLinesWritten(5);
+      
+      expect(gameState.getStats().totalLinesWritten).toBe(initialLines); // Should not change
+    });
+
+    test('should not process combo when disabled', () => {
+      gameState.toggleEnabled(); // Disable
+      const initialCombo = gameState.getStats().combo;
+      
+      gameState.incrementCombo();
+      
+      expect(gameState.getStats().combo).toBe(initialCombo); // Should not change
     });
   });
 });
