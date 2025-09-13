@@ -33,6 +33,8 @@ export class GameState {
     private lastTypingTime: number = 0;
     private comboDecayTimer: NodeJS.Timeout | null = null;
     private refreshCallback: (() => void) | null = null;
+    private multiplierCallback: ((combo: number) => void) | null = null;
+    private impactFrameCallback: (() => void) | null = null;
     private stats: PlayerStats = {
         level: 1,
         xp: 0,
@@ -53,6 +55,14 @@ export class GameState {
 
     setRefreshCallback(callback: () => void) {
         this.refreshCallback = callback;
+    }
+
+    setMultiplierCallback(callback: (combo: number) => void) {
+        this.multiplierCallback = callback;
+    }
+
+    setImpactFrameCallback(callback: () => void) {
+        this.impactFrameCallback = callback;
     }
 
     private startComboDecaySystem() {
@@ -152,6 +162,16 @@ export class GameState {
         this.stats.combo++;
         if (this.stats.combo > this.stats.maxCombo) {
             this.stats.maxCombo = this.stats.combo;
+        }
+        
+        // Trigger impact frame on every typing event
+        if (this.impactFrameCallback) {
+            this.impactFrameCallback();
+        }
+        
+        // Trigger multiplier display
+        if (this.multiplierCallback && this.stats.combo >= 5) {
+            this.multiplierCallback(this.stats.combo);
         }
         
         // Special combo milestone notifications

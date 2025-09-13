@@ -9,6 +9,8 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private visualEngine: VisualEngine;
     private animationFrame: number = 0;
     private animationTimer?: NodeJS.Timeout;
+    private currentMultiplier: number = 1;
+    private multiplierVisible: boolean = false;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -31,26 +33,75 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         } catch (error) {
             console.error('CodeQuest: Error starting animation:', error);
         }
+
+        // Set up multiplier callback
+        this.gameState.setMultiplierCallback((combo: number) => {
+            this.showMultiplier(combo);
+        });
+
+        // Set up impact frame callback for typing-triggered animation
+        this.gameState.setImpactFrameCallback(() => {
+            this.triggerImpactFrame();
+        });
     }
 
     private startImageAnimation() {
-        // Cycle through images every 5 seconds for slower animation
-        this.animationTimer = setInterval(() => {
-            const visualState = this.visualEngine.getVisualState();
-            
-            if (visualState.playerState === 'boss_battle') {
-                // Boss battle: cycle between 2 dragon images (0, 1) - HIGHEST PRIORITY
-                this.animationFrame = (this.animationFrame + 1) % 2;
-            } else if (visualState.useImages) {
-                // Idle state: cycle between 2 images (0, 1)
-                this.animationFrame = (this.animationFrame + 1) % 2;
-            } else if (visualState.playerState === 'fighting') {
-                // Combat state: cycle between 3 images (0, 1, 2)
-                this.animationFrame = (this.animationFrame + 1) % 3;
-            }
-            
-            this.refresh();
-        }, 5000); // 5 second intervals
+        // Animation is now triggered by typing events, not timers
+        // This method is kept for compatibility but does nothing
+        console.log('CodeQuest: Image animation now triggered by typing events');
+    }
+
+    public triggerImpactFrame() {
+        // Trigger frame switch for impact effect when typing
+        const visualState = this.visualEngine.getVisualState();
+        
+        if (visualState.playerState === 'boss_battle') {
+            // Boss battle: switch between 2 dragon images (0, 1)
+            this.animationFrame = (this.animationFrame + 1) % 2;
+        } else if (visualState.playerState === 'fighting') {
+            // Combat state: switch between 2 slime images (0, 1)
+            this.animationFrame = (this.animationFrame + 1) % 2;
+        }
+        // Idle state stays static (no frame switching)
+        
+        // Refresh the webview to show the new frame
+        if (this._view) {
+            this._view.webview.html = this._getHtmlForWebview();
+        }
+    }
+
+    private showMultiplier(combo: number) {
+        // Calculate multiplier tier based on combo
+        let multiplier = 1;
+        if (combo >= 50) multiplier = 10;
+        else if (combo >= 35) multiplier = 7.5;
+        else if (combo >= 25) multiplier = 5;
+        else if (combo >= 20) multiplier = 4;
+        else if (combo >= 15) multiplier = 3;
+        else if (combo >= 10) multiplier = 2;
+        else if (combo >= 5) multiplier = 1.5;
+
+        this.currentMultiplier = multiplier;
+        this.multiplierVisible = true;
+
+        // Generate random position and rotation
+        const randomX = Math.random() * 70 + 15; // 15% to 85% from left
+        const randomY = Math.random() * 70 + 15; // 15% to 85% from top
+        const randomRotation = Math.random() * 180; // 0 to 180 degrees
+
+        // Update webview if it exists
+        if (this._view) {
+            this._view.webview.postMessage({
+                type: 'showMultiplier',
+                multiplier: multiplier,
+                combo: combo,
+                position: { x: randomX, y: randomY },
+                rotation: randomRotation
+            });
+        }
+
+        // Note: Each multiplier now manages its own lifecycle (4 seconds)
+        // No global hide timer needed since they can stack
     }
 
     resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -144,8 +195,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         console.log('CodeQuest: Visual state - idle:', isIdle, 'fighting:', isFighting, 'boss:', isBossBattle);
         console.log('CodeQuest: About to choose image section...');
         
+        // Define variables for boss battle state
+        let allSubtasksCompleted = false;
+        let currentBoss: any = null;
+        
         if (isBossBattle) {
             console.log('CodeQuest: ENTERING BOSS BATTLE SECTION!');
+            // Get boss battle details for progress display
+            currentBoss = stats.currentBossBattle;
+            allSubtasksCompleted = currentBoss?.subtasks?.every((st: any) => st.completed) || false;
             // Boss Battle state: cycle between 2 knight vs dragon images - HIGHEST PRIORITY
             const bossImages = [
                 this._view?.webview.asWebviewUri(
@@ -161,156 +219,61 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             console.log('CodeQuest: Boss images array:', bossImages.map(img => img?.toString()));
             console.log('CodeQuest: Selected boss image:', currentImage);
             
-            // Get boss battle details for progress display
-            const currentBoss = stats.currentBossBattle;
+            // Calculate progress percentage
             const progressPercentage = currentBoss ? Math.min(100, (currentBoss.currentLines / currentBoss.targetLines) * 100) : 0;
-            const allSubtasksCompleted = currentBoss?.subtasks?.every(st => st.completed) || false;
             
-            // Generate subtasks HTML
-            let subtasksHtml = '';
+            // Generate subtasks HTML for boss battles - simplified for new layout
             if (currentBoss?.subtasks && currentBoss.subtasks.length > 0) {
-                subtasksHtml = `
-                    <div style="margin: 15px 0; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                imageSection = `
+                    <div class="boss-section">
                         <h4 style="margin: 0 0 10px 0; color: #fff;">📋 Subtasks:</h4>
-                        ${currentBoss.subtasks.map(subtask => `
-                            <div style="margin: 8px 0; padding: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; display: flex; align-items: center;">
+                        ${currentBoss.subtasks.map((subtask: any) => `
+                            <div class="subtask">
                                 <input type="checkbox" 
                                        id="${subtask.id}" 
                                        ${subtask.completed ? 'checked' : ''} 
-                                       onchange="toggleSubtask('${subtask.id}')"
-                                       style="margin-right: 8px; transform: scale(1.2);">
-                                <label for="${subtask.id}" 
-                                       style="flex: 1; color: ${subtask.completed ? '#90EE90' : '#fff'}; 
-                                              text-decoration: ${subtask.completed ? 'line-through' : 'none'};">
-                                    ${subtask.description}
-                                </label>
+                                       onchange="toggleSubtask('${subtask.id}')" />
+                                <label for="${subtask.id}">${subtask.description}</label>
                             </div>
                         `).join('')}
                     </div>
                 `;
+            } else {
+                imageSection = '';
             }
-            
-            imageSection = `
-                <div class="game-section boss-section">
-                    <h3>🐉 BOSS BATTLE! 🐉</h3>
-                    <h4>${currentBoss?.name || 'Unknown Boss'}</h4>
-                    <img src="${currentImage}" alt="Knight Fighting Dragon" class="game-image" 
-                        onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
-                    <div style="display:none; color: red; padding: 10px; background: rgba(255,0,0,0.1);">
-                        ❌ Image failed to load: ${currentImage}
-                    </div>
-                    <p>⚔️ EPIC DRAGON BATTLE! ⚔️</p>
-                    <p>🔥 Combo: ${stats.combo}x 🔥</p>
-                    
-                    ${subtasksHtml}
-                    
-                    <div style="margin: 15px 0; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 5px;">
-                        <div style="margin-bottom: 8px;">
-                            <strong>Progress: ${currentBoss?.currentLines || 0}/${currentBoss?.targetLines || 0} lines</strong>
-                        </div>
-                        <div style="background: #333; border-radius: 10px; height: 10px; margin-bottom: 10px;">
-                            <div style="background: linear-gradient(to right, #ff6b6b, #ffd93d); height: 100%; border-radius: 10px; width: ${progressPercentage}%; transition: width 0.3s ease;"></div>
-                        </div>
-                        <button onclick="completeBossBattle()" 
-                                style="background: ${allSubtasksCompleted ? '#28a745' : '#6c757d'}; 
-                                       color: white; border: none; padding: 10px 15px; border-radius: 5px; margin: 5px; 
-                                       cursor: ${allSubtasksCompleted ? 'pointer' : 'not-allowed'}; font-weight: bold;
-                                       opacity: ${allSubtasksCompleted ? '1' : '0.6'};"
-                                ${allSubtasksCompleted ? '' : 'disabled'}>
-                            ✅ Complete Boss Battle${allSubtasksCompleted ? '' : ' (Complete all subtasks first)'}
-                        </button>
-                    </div>
-                    
-                    <div style="font-size: 10px; color: #888; margin: 10px; padding: 10px; background: rgba(0,0,0,0.2);">
-                        <strong>Debug Info:</strong><br>
-                        Frame: ${this.animationFrame}<br>
-                        Image Found: ${currentImage ? 'Yes' : 'No'}<br>
-                        Image URL: ${currentImage}<br>
-                        Extension URI: ${this._extensionUri.toString()}<br>
-                        Boss Battle Active: ${isBossBattle ? 'Yes' : 'No'}
-                    </div>
-                </div>
-            `;
         } else if (isIdle) {
-            // Idle state: cycle between 2 knight images
+            // Idle state: static single image (no cycling)
             const idleImages = [
                 this._view?.webview.asWebviewUri(
                     vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Idle', 'pixel art of a knight 1.png')
-                ),
-                this._view?.webview.asWebviewUri(
-                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Idle', 'pixel art of a knight 2.png')
                 )
             ];
-            currentImage = idleImages[this.animationFrame % 2]?.toString() || '';
-            console.log('CodeQuest: Idle image selected:', currentImage);
-            imageSection = `
-                <div class="game-section idle-section">
-                    <h3>🏰 Knight's Rest 🏰</h3>
-                    <img src="${currentImage}" alt="Knight at Campfire" class="game-image" />
-                    <p>🔥 Resting by the campfire... 🔥</p>
-                    <p>💤 Ready for your next adventure! 💤</p>
-                    <p><small>Debug: Frame ${this.animationFrame}, Image: ${currentImage ? 'Found' : 'Missing'}</small></p>
-                    <div style="margin-top: 15px;">
-                        <button onclick="startBossBattle()" style="background: #9400D3; color: white; border: none; padding: 8px 12px; border-radius: 5px; margin: 5px; cursor: pointer; font-size: 12px;">🐉 Start Boss Battle</button>
-                    </div>
-                </div>
-            `;
+            currentImage = idleImages[0]?.toString() || '';
+            console.log('CodeQuest: Idle image selected (static):', currentImage);
+            imageSection = ''; // No extra section needed for idle state
         } else if (isFighting) {
-            // Combat state: cycle between 3 knight vs slime images
+            // Combat state: cycle between 2 knight vs slime images (removed 3rd image)
             const combatImages = [
                 this._view?.webview.asWebviewUri(
                     vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Slime', 'Knight V Slime 1.png')
                 ),
                 this._view?.webview.asWebviewUri(
                     vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Slime', 'Knight V Slime 2.png')
-                ),
-                this._view?.webview.asWebviewUri(
-                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Slime', 'Knight V Slime 3.png')
                 )
             ];
-            currentImage = combatImages[this.animationFrame % 3]?.toString() || '';
+            currentImage = combatImages[this.animationFrame % 2]?.toString() || '';
             console.log('CodeQuest: Combat image selected:', currentImage);
-            imageSection = `
-                <div class="game-section combat-section">
-                    <h3>⚔️ Combat Mode ⚔️</h3>
-                    <img src="${currentImage}" alt="Knight Fighting Slime" class="game-image" />
-                    <p>🗡️ Fighting slimes! 🗡️</p>
-                    <p>🔥 Combo: ${stats.combo}x 🔥</p>
-                    <p><small>Debug: Frame ${this.animationFrame}, Image: ${currentImage ? 'Found' : 'Missing'}</small></p>
-                    <div style="margin-top: 15px;">
-                        <button onclick="startBossBattle()" style="background: #9400D3; color: white; border: none; padding: 8px 12px; border-radius: 5px; margin: 5px; cursor: pointer; font-size: 12px;">🐉 Start Boss Battle</button>
-                    </div>
-                </div>
-            `;
+            imageSection = ''; // No extra section needed for combat state
         } else {
-            // Default state - always show a test image to verify webview works
-            const testImage = this._view?.webview.asWebviewUri(
+            // Default state - set a test image
+            currentImage = this._view?.webview.asWebviewUri(
                 vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Idle', 'pixel art of a knight 1.png')
-            );
-            console.log('CodeQuest: Test image URI:', testImage?.toString());
-            imageSection = `
-                <div class="game-section">
-                    <h3>🎮 CodeQuest Knight Display - TEST MODE 🎮</h3>
-                    <div style="background: #444; padding: 20px; margin: 10px; border-radius: 8px;">
-                        <p>✅ WebView is working!</p>
-                        <p>🔧 Loading image test...</p>
-                        <img src="${testImage}" alt="Knight" class="game-image" 
-                            onload="this.nextElementSibling.style.display='block'; this.nextElementSibling.innerHTML='✅ Image loaded successfully!'" 
-                            onerror="this.nextElementSibling.style.display='block'; this.nextElementSibling.innerHTML='❌ Image failed to load';" />
-                        <div style="display:none; color: yellow; font-weight: bold; margin-top: 10px;"></div>
-                    </div>
-                    <p><strong>State:</strong> ${visualState.playerState}</p>
-                    <p><strong>Frame:</strong> ${this.animationFrame}</p>
-                    <p><strong>Extension URI:</strong> ${this._extensionUri.toString()}</p>
-                    <p><strong>Image URI:</strong> ${testImage?.toString() || 'undefined'}</p>
-                    <div style="margin-top: 20px;">
-                        <button onclick="startBossBattle()" style="background: #9400D3; color: white; border: none; padding: 10px 15px; border-radius: 5px; margin: 5px; cursor: pointer;">🐉 Test Boss Battle</button>
-                    </div>
-                </div>
-            `;
+            )?.toString() || '';
+            console.log('CodeQuest: Default/test image selected:', currentImage);
+            imageSection = ''; // No extra section needed for default state
         }
 
-        // Simplified HTML for debugging
+        // Simplified HTML for cleaner sidebar - just image, multiplier, and buttons
         return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -323,6 +286,12 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             padding: 10px;
             color: var(--vscode-foreground);
             background: var(--vscode-editor-background);
+            margin: 0;
+        }
+        .knight-container {
+            position: relative;
+            text-align: center;
+            margin-bottom: 20px;
         }
         .game-image {
             width: 100%;
@@ -330,36 +299,118 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             height: auto;
             border-radius: 8px;
             margin: 10px 0;
+            transition: transform 0.1s ease;
         }
-        .game-section {
-            text-align: center;
-            padding: 15px;
-            border-radius: 8px;
+        .game-image.shake {
+            animation: shake 0.5s ease-in-out;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px) translateY(-2px); }
+            50% { transform: translateX(5px) translateY(2px); }
+            75% { transform: translateX(-3px) translateY(-1px); }
+        }
+        .multiplier-overlay {
+            position: absolute;
+            color: #FFD700;
+            font-weight: bold;
+            font-size: 24px;
+            text-shadow: 
+                0 0 10px #FFD700,
+                0 0 20px #FFD700,
+                0 0 30px #FFD700,
+                0 0 40px #FFD700,
+                2px 2px 4px rgba(0, 0, 0, 0.8);
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.3s ease;
+            z-index: 10;
+            pointer-events: none;
+        }
+        .multiplier-overlay.show {
+            opacity: 1;
+            transform: scale(1);
+            animation: pulse 1s infinite alternate;
+        }
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.1); }
+        }
+        .combo-display {
+            font-size: 16px;
             margin: 10px 0;
-            background: rgba(0,100,200,0.2);
-            border: 1px solid rgba(0,100,200,0.5);
+            color: #FFD700;
+            font-weight: bold;
         }
-        .idle-section {
-            background: rgba(139, 69, 19, 0.3);
-            border: 2px solid #8B4513;
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 15px;
         }
-        .combat-section {
-            background: rgba(220, 20, 60, 0.3);
-            border: 2px solid #DC143C;
+        .action-button {
+            background: #9400D3;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: background 0.3s ease;
+        }
+        .action-button:hover {
+            background: #7B00B5;
+        }
+        .action-button:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            opacity: 0.6;
         }
         .boss-section {
-            background: rgba(148, 0, 211, 0.3);
+            background: rgba(148, 0, 211, 0.2);
             border: 2px solid #9400D3;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        .subtask {
+            display: flex;
+            align-items: center;
+            margin: 8px 0;
+            padding: 8px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 5px;
+        }
+        .subtask input {
+            margin-right: 10px;
+            transform: scale(1.2);
         }
     </style>
 </head>
 <body>
-    <h2>🖼️ Knight Display</h2>
+    <div class="knight-container">
+        <img id="knightImage" src="${currentImage}" alt="Knight" class="game-image" />
+        <div id="multiplierContainer"></div>
+    </div>
+    
+    <div class="combo-display">
+        🔥 Combo: ${stats.combo}x 🔥
+    </div>
+    
     ${imageSection}
-    <hr>
-    <p><strong>Level:</strong> ${stats.level}</p>
-    <p><strong>Combo:</strong> ${stats.combo}x</p>
-    <p><strong>Extension URI:</strong> ${this._extensionUri.toString()}</p>
+    
+    <div class="action-buttons">
+        ${isBossBattle ? 
+            `<button onclick="completeBossBattle()" class="action-button" 
+                     ${allSubtasksCompleted ? '' : 'disabled'}>
+                ✅ Complete Boss Battle
+             </button>` : 
+            `<button onclick="startBossBattle()" class="action-button">
+                🐉 Start Boss Battle
+             </button>`
+        }
+    </div>
     
     <script>
         const vscode = acquireVsCodeApi();
@@ -375,6 +426,59 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         function toggleSubtask(subtaskId) {
             vscode.postMessage({ type: 'toggleSubtask', subtaskId: subtaskId });
         }
+        
+        // Handle multiplier display messages
+        window.addEventListener('message', event => {
+            const message = event.data;
+            const container = document.getElementById('multiplierContainer');
+            const knightImage = document.getElementById('knightImage');
+            
+            switch (message.type) {
+                case 'showMultiplier':
+                    // Create a new multiplier element
+                    const multiplier = document.createElement('div');
+                    multiplier.className = 'multiplier-overlay show';
+                    multiplier.textContent = message.multiplier + 'x';
+                    
+                    // Apply random position and rotation
+                    if (message.position && message.rotation !== undefined) {
+                        multiplier.style.left = message.position.x + '%';
+                        multiplier.style.top = message.position.y + '%';
+                        multiplier.style.transform = \`translate(-50%, -50%) scale(1) rotate(\${message.rotation}deg)\`;
+                    } else {
+                        multiplier.style.transform = 'translate(-50%, -50%) scale(1)';
+                    }
+                    
+                    // Add to container
+                    container.appendChild(multiplier);
+                    
+                    // Add shake effect to knight image
+                    if (knightImage) {
+                        knightImage.classList.add('shake');
+                        setTimeout(() => {
+                            knightImage.classList.remove('shake');
+                        }, 500);
+                    }
+                    
+                    // Remove this multiplier after 4 seconds (longer linger time)
+                    setTimeout(() => {
+                        if (multiplier.parentNode) {
+                            multiplier.style.opacity = '0';
+                            multiplier.style.transform = multiplier.style.transform + ' scale(0.3)';
+                            setTimeout(() => {
+                                if (multiplier.parentNode) {
+                                    container.removeChild(multiplier);
+                                }
+                            }, 300);
+                        }
+                    }, 4000);
+                    break;
+                case 'hideMultiplier':
+                    // Clear all multipliers (if needed for manual clearing)
+                    container.innerHTML = '';
+                    break;
+            }
+        });
     </script>
 </body>
 </html>`;
