@@ -4,13 +4,11 @@ import { SidebarProvider } from './sidebarProvider';
 import { CodeAnalyzer } from './codeAnalyzer';
 import { TestWebviewProvider } from './testWebviewProvider';
 import { GameStatsTreeProvider } from './gameStatsTreeProvider';
-import { SoundManager } from './soundManager';
 
 let gameState: GameState;
 let sidebarProvider: SidebarProvider;
 let codeAnalyzer: CodeAnalyzer;
 let treeProvider: GameStatsTreeProvider;
-let soundManager: SoundManager;
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('🔥 CodeQuest: Extension activate function called!');
@@ -21,13 +19,10 @@ export function activate(context: vscode.ExtensionContext) {
     
     console.log('CodeQuest: Extension activating...');
     
-    soundManager = new SoundManager(context);
-    console.log('CodeQuest: SoundManager created');
-    
-    gameState = new GameState(context, soundManager);
+    gameState = new GameState(context);
     console.log('CodeQuest: GameState created');
     
-    sidebarProvider = new SidebarProvider(context.extensionUri, gameState, soundManager);
+    sidebarProvider = new SidebarProvider(context.extensionUri, gameState);
     console.log('CodeQuest: SidebarProvider created');
     
     treeProvider = new GameStatsTreeProvider(gameState);
@@ -114,25 +109,6 @@ export function activate(context: vscode.ExtensionContext) {
             sidebarProvider.refresh();
             treeProvider.refresh();
             vscode.window.showInformationMessage('🗡️ Wizard session terminated! Back to knight mode.');
-        }),
-        vscode.commands.registerCommand('codequest.toggleSounds', async () => {
-            await soundManager.toggleSounds();
-        }),
-        vscode.commands.registerCommand('codequest.setSoundVolume', async () => {
-            const input = await vscode.window.showInputBox({
-                prompt: 'Enter volume (0-100)',
-                value: soundManager.getVolume().toString(),
-                validateInput: (value) => {
-                    const num = parseInt(value);
-                    if (isNaN(num) || num < 0 || num > 100) {
-                        return 'Volume must be a number between 0 and 100';
-                    }
-                    return null;
-                }
-            });
-            if (input) {
-                await soundManager.setVolume(parseInt(input));
-            }
         })
     );
 

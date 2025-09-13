@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { GameState } from './gameState';
 import { VisualEngine } from './visualEngine';
-import { SoundManager } from './soundManager';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'codequest.webview';
@@ -23,8 +22,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
-        private gameState: GameState,
-        private soundManager?: SoundManager
+        private gameState: GameState
     ) { 
         console.log('CodeQuest: SidebarProvider constructor called');
         console.log('CodeQuest: Extension URI:', _extensionUri?.toString());
@@ -106,11 +104,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             // Boss battle: flash to Dragon 2 (frame 1) for impact
             this.animationFrame = 1;
             
-            // Play boss hit sound
-            if (this.soundManager) {
-                this.soundManager.playBossHit(this._view?.webview);
-            }
-            
             // Return to Dragon 1 (frame 0) after brief flash
             setTimeout(() => {
                 this.animationFrame = 0;
@@ -121,11 +114,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             const oldFrame = this.animationFrame;
             this.animationFrame = (this.animationFrame + 1) % 2;
             console.log('CodeQuest: Slime combat - Frame switched from', oldFrame, 'to', this.animationFrame);
-            
-            // Play combat hit sound
-            if (this.soundManager) {
-                this.soundManager.playCombatHit(this._view?.webview);
-            }
         }
         // Idle state stays static (no frame switching)
         
@@ -183,15 +171,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 const visualState = this.visualEngine.getVisualState();
                 if (visualState.playerState === 'idle') {
                     console.log('CodeQuest: Random wizard appearance in idle!');
-                    // Temporarily activate wizard for 3 seconds
+                    // Temporarily activate wizard for 15 seconds
                     this.gameState.recordWizardActivity();
                     this.refresh();
                     
-                    // Turn off wizard after 3 seconds
+                    // Turn off wizard after 15 seconds
                     setTimeout(() => {
                         this.gameState.killWizardSession();
                         this.refresh();
-                    }, 3000);
+                    }, 15000);
                 }
                 scheduleNextWizard(); // Schedule the next appearance
             }, randomDelay);
@@ -554,47 +542,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             vscode.postMessage({ type: 'toggleSubtask', subtaskId: subtaskId });
         }
         
-        // Sound effects system using Web Audio API
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const soundLibrary = {
-            'combat-hit': { frequency: 800, duration: 0.1, type: 'square' },
-            'boss-hit': { frequency: 400, duration: 0.2, type: 'sawtooth' },
-            'level-up': { frequency: 523.25, duration: 0.5, type: 'sine' }, // C5 note
-            'achievement': { frequency: 659.25, duration: 0.3, type: 'sine' }, // E5 note
-            'combo-milestone': { frequency: 783.99, duration: 0.2, type: 'sine' }, // G5 note
-            'wizard-appear': { frequency: 880, duration: 0.3, type: 'triangle' } // A5 note
-        };
-        
-        function playSound(soundName, volume = 0.5) {
-            try {
-                const sound = soundLibrary[soundName];
-                if (!sound) {
-                    console.log('CodeQuest: Unknown sound:', soundName);
-                    return;
-                }
-                
-                const oscillator = audioContext.createOscillator();
-                const gainNode = audioContext.createGain();
-                
-                oscillator.connect(gainNode);
-                gainNode.connect(audioContext.destination);
-                
-                oscillator.frequency.setValueAtTime(sound.frequency, audioContext.currentTime);
-                oscillator.type = sound.type;
-                
-                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
-                gainNode.gain.linearRampToValueAtTime(volume * 0.3, audioContext.currentTime + 0.01);
-                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + sound.duration);
-                
-                oscillator.start(audioContext.currentTime);
-                oscillator.stop(audioContext.currentTime + sound.duration);
-                
-                console.log('CodeQuest: Played sound:', soundName);
-            } catch (error) {
-                console.log('CodeQuest: Error playing sound:', error);
-            }
-        }
-        
         // Handle multiplier display messages
         window.addEventListener('message', event => {
             const message = event.data;
@@ -602,9 +549,6 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             const knightImage = document.getElementById('knightImage');
             
             switch (message.type) {
-                case 'playSound':
-                    playSound(message.soundName, message.volume);
-                    break;
                 case 'showMultiplier':
                     // Create a new multiplier element
                     const multiplier = document.createElement('div');

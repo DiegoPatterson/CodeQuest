@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import { SoundManager } from './soundManager';
 
 export interface PlayerStats {
     level: number;
@@ -31,7 +30,6 @@ export interface BossBattle {
 
 export class GameState {
     private context: vscode.ExtensionContext;
-    private soundManager?: SoundManager;
     private lastTypingTime: number = 0;
     private comboDecayTimer: NodeJS.Timeout | null = null;
     private refreshCallback: (() => void) | null = null;
@@ -60,9 +58,8 @@ export class GameState {
         bossBattlesWon: 0
     };
 
-    constructor(context: vscode.ExtensionContext, soundManager?: SoundManager) {
+    constructor(context: vscode.ExtensionContext) {
         this.context = context;
-        this.soundManager = soundManager;
         this.loadStats();
         this.startComboDecaySystem();
     }
@@ -88,11 +85,6 @@ export class GameState {
             this.wizardSessions++;
             this.wizardSessionActive = true;
             console.log('CodeQuest: New wizard session started. Total sessions:', this.wizardSessions);
-            
-            // Play wizard appear sound for new sessions
-            if (this.soundManager) {
-                this.soundManager.playWizardAppear();
-            }
         } else {
             console.log('CodeQuest: Extending existing wizard session');
         }
@@ -199,11 +191,6 @@ export class GameState {
         this.stats.level++;
         this.stats.xpToNextLevel = Math.floor(this.stats.xpToNextLevel * 1.5);
         
-        // Play level up sound
-        if (this.soundManager) {
-            this.soundManager.playLevelUp();
-        }
-        
         // Enhanced level up messages with achievements
         let message = `🎉 LEVEL UP! Welcome to Level ${this.stats.level}!`;
         let extraReward = '';
@@ -274,24 +261,12 @@ export class GameState {
         // Special combo milestone notifications
         if (this.stats.combo === 10) {
             vscode.window.showInformationMessage(`🔥 HOT STREAK! 10x combo achieved!`);
-            if (this.soundManager) {
-                this.soundManager.playComboMilestone();
-            }
         } else if (this.stats.combo === 25) {
             vscode.window.showInformationMessage(`⚡ SUPER COMBO! 25x combo - You're on fire!`);
-            if (this.soundManager) {
-                this.soundManager.playComboMilestone();
-            }
         } else if (this.stats.combo === 50) {
             vscode.window.showInformationMessage(`🌟 MEGA COMBO! 50x combo - UNSTOPPABLE!`);
-            if (this.soundManager) {
-                this.soundManager.playComboMilestone();
-            }
         } else if (this.stats.combo === 100) {
             vscode.window.showInformationMessage(`💫 LEGENDARY COMBO! 100x combo - CODING MASTER!`);
-            if (this.soundManager) {
-                this.soundManager.playComboMilestone();
-            }
         }
         
         // Combo bonuses - more frequent and varied
