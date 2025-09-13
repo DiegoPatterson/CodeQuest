@@ -23,6 +23,9 @@ export interface BossBattle {
 
 export class GameState {
     private context: vscode.ExtensionContext;
+    private lastTypingTime: number = 0;
+    private comboDecayTimer: NodeJS.Timeout | null = null;
+    private refreshCallback: (() => void) | null = null;
     private stats: PlayerStats = {
         level: 1,
         xp: 0,
@@ -38,6 +41,39 @@ export class GameState {
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
         this.loadStats();
+        this.startComboDecaySystem();
+    }
+
+    setRefreshCallback(callback: () => void) {
+        this.refreshCallback = callback;
+    }
+
+    private startComboDecaySystem() {
+        // Start combo decay timer - combo decays faster now (every 3 seconds instead of longer)
+        setInterval(() => {
+            const now = Date.now();
+            // If user hasn't typed for 3 seconds, start reducing combo
+            if (this.lastTypingTime > 0 && now - this.lastTypingTime > 3000) {
+                if (this.stats.combo > 0) {
+                    console.log(`CodeQuest: Combo decaying from ${this.stats.combo} to ${this.stats.combo - 1}`);
+                    this.stats.combo = Math.max(0, this.stats.combo - 1);
+                    this.saveStats();
+                    
+                    // Trigger UI refresh when combo changes
+                    if (this.refreshCallback) {
+                        this.refreshCallback();
+                    }
+                }
+            }
+        }, 1000); // Check every second
+    }
+
+    getLastTypingTime(): number {
+        return this.lastTypingTime;
+    }
+
+    updateTypingTime() {
+        this.lastTypingTime = Date.now();
     }
 
     private loadStats() {
@@ -83,18 +119,49 @@ export class GameState {
         this.stats.level++;
         this.stats.xpToNextLevel = Math.floor(this.stats.xpToNextLevel * 1.5);
         
-        vscode.window.showInformationMessage(`🎉 Level Up! You're now level ${this.stats.level}!`);
+        // Enhanced level up messages with achievements
+        let message = `🎉 LEVEL UP! Welcome to Level ${this.stats.level}!`;
+        let extraReward = '';
+        
+        if (this.stats.level === 10) {
+            message = `⭐ EXPERT RANK ACHIEVED! Level ${this.stats.level} reached!`;
+            extraReward = ' +50 Bonus XP!';
+            this.stats.xp += 50;
+        } else if (this.stats.level === 25) {
+            message = `💎 MASTER RANK ACHIEVED! Level ${this.stats.level} reached!`;
+            extraReward = ' +100 Bonus XP!';
+            this.stats.xp += 100;
+        } else if (this.stats.level === 50) {
+            message = `👑 LEGENDARY STATUS! Level ${this.stats.level} - You are a coding legend!`;
+            extraReward = ' +250 Bonus XP!';
+            this.stats.xp += 250;
+        }
+        
+        vscode.window.showInformationMessage(message + extraReward);
     }
 
     incrementCombo() {
+        this.updateTypingTime(); // Track when user last typed
         this.stats.combo++;
         if (this.stats.combo > this.stats.maxCombo) {
             this.stats.maxCombo = this.stats.combo;
         }
         
-        // Combo bonuses
-        if (this.stats.combo % 10 === 0) {
-            this.addXP(this.stats.combo, `(${this.stats.combo}x combo bonus!)`);
+        // Special combo milestone notifications
+        if (this.stats.combo === 10) {
+            vscode.window.showInformationMessage(`🔥 HOT STREAK! 10x combo achieved!`);
+        } else if (this.stats.combo === 25) {
+            vscode.window.showInformationMessage(`⚡ SUPER COMBO! 25x combo - You're on fire!`);
+        } else if (this.stats.combo === 50) {
+            vscode.window.showInformationMessage(`🌟 MEGA COMBO! 50x combo - UNSTOPPABLE!`);
+        } else if (this.stats.combo === 100) {
+            vscode.window.showInformationMessage(`💫 LEGENDARY COMBO! 100x combo - CODING MASTER!`);
+        }
+        
+        // Combo bonuses - more frequent and varied
+        if (this.stats.combo % 5 === 0 && this.stats.combo >= 5) {
+            const bonusXP = this.stats.combo;
+            this.addXP(bonusXP, `(${this.stats.combo}x combo bonus!)`);
         }
         
         this.saveStats();

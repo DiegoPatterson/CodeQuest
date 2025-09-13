@@ -10,7 +10,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onStartupFinished"
+    "onView:codequest.sidebar"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -41,7 +41,7 @@
       ]
     },
     "views": {
-      "explorer": [
+      "codequest": [
         {
           "id": "codequest.sidebar",
           "name": "🎮 CodeQuest",
@@ -54,13 +54,20 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile && npm run lint",
+    "pretest": "npm run compile",
     "lint": "eslint src --ext ts",
-    "test": "node ./out/test/runTest.js"
+    "test": "jest",
+    "test:watch": "jest --watch"
   },
   "devDependencies": {
     "@types/vscode": "^1.74.0",
     "@types/node": "16.x",
+    "@types/jest": "^29.5.5",
+    "@typescript-eslint/eslint-plugin": "^5.45.0",
+    "@typescript-eslint/parser": "^5.45.0",
+    "eslint": "^8.28.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1",
     "typescript": "^4.9.4"
   }
 }

@@ -1,29 +1,56 @@
 import * as vscode from 'vscode';
 import { GameState } from './gameState';
+import { VisualEngine } from './visualEngine';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
+    private visualEngine: VisualEngine;
+    private animationFrame: number = 0;
+    private animationTimer?: NodeJS.Timeout;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private gameState: GameState
-    ) { }
+    ) { 
+        console.log('CodeQuest: SidebarProvider constructor called');
+        console.log('CodeQuest: Extension URI:', _extensionUri);
+        console.log('CodeQuest: GameState:', gameState ? 'exists' : 'null');
+        this.visualEngine = new VisualEngine(gameState);
+        this.startImageAnimation();
+    }
+
+    private startImageAnimation() {
+        // Cycle through images every 2 seconds for idle animation
+        this.animationTimer = setInterval(() => {
+            if (this.visualEngine.shouldUseImages()) {
+                this.animationFrame = (this.animationFrame + 1) % 2;
+                this.refresh();
+            }
+        }, 2000);
+    }
 
     resolveWebviewView(webviewView: vscode.WebviewView) {
+        console.log('CodeQuest: resolveWebviewView called!');
         this._view = webviewView;
 
         webviewView.webview.options = {
             enableScripts: true,
-            localResourceRoots: [this._extensionUri]
+            localResourceRoots: [
+                this._extensionUri,
+                vscode.Uri.joinPath(this._extensionUri, 'Assets')
+            ]
         };
 
-        this.refresh();
-
-        // Add this line for debugging
-        console.log('CodeQuest: WebView resolved successfully');
+        // Set initial HTML content
+        const html = this._getHtmlForWebview();
+        console.log('CodeQuest: Setting HTML content, length:', html.length);
+        webviewView.webview.html = html;
+        
+        console.log('CodeQuest: WebView resolved and HTML set');
 
         // Handle messages from webview
         webviewView.webview.onDidReceiveMessage(data => {
+            console.log('CodeQuest: Received message from webview:', data);
             switch (data.type) {
                 case 'startBossBattle':
                     vscode.commands.executeCommand('codequest.startBossBattle');
@@ -40,13 +67,37 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     refresh() {
         if (this._view) {
+            // Check if we should use images for idle state
+            const shouldUseImages = this.visualEngine.shouldUseImages();
+            console.log('CodeQuest: Refresh - should use images:', shouldUseImages);
+            
+            if (shouldUseImages) {
+                // Cycle animation frame for alternating images
+                this.animationFrame = (this.animationFrame + 1) % 2;
+            }
+            
             this._view.webview.html = this._getHtmlForWebview();
         }
     }
 
     private _getHtmlForWebview() {
         const stats = this.gameState.getStats();
+        console.log('CodeQuest: Getting stats for HTML:', stats);
         const xpPercentage = (stats.xp / stats.xpToNextLevel) * 100;
+        
+        // Check if we should show images
+        const visualState = this.visualEngine.getVisualState();
+        const shouldUseImages = visualState.useImages;
+        
+        // Get image URIs
+        const knightImage1 = this._view?.webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Idle', 'pixel art of a knight.png')
+        );
+        const knightImage2 = this._view?.webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Idle', 'pixel art of a knight 2.png')
+        );
+        
+        const currentKnightImage = this.animationFrame === 0 ? knightImage1 : knightImage2;
 
         return `<!DOCTYPE html>
 <html lang="en">
@@ -69,6 +120,21 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             font-size: 24px;
             font-weight: bold;
             color: #ffd700;
+        }
+        .knight-image {
+            width: 100%;
+            max-width: 300px;
+            height: auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            margin: 20px 0;
+        }
+        .idle-section {
+            text-align: center;
+            padding: 20px;
+            background: rgba(0,0,0,0.2);
+            border-radius: 10px;
+            margin: 10px 0;
         }
         .xp-bar {
             width: 100%;
@@ -156,6 +222,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         </div>
         <div>${stats.xp}/${stats.xpToNextLevel} XP</div>
     </div>
+
+    ${shouldUseImages ? `
+    <div class="idle-section">
+        <h3>🏰 Knight's Rest 🏰</h3>
+        <img src="${currentKnightImage}" alt="Knight at Campfire" class="knight-image" />
+        <p>🔥 Resting by the campfire... 🔥</p>
+        <p>💤 Ready for your next adventure! 💤</p>
+    </div>
+    ` : ''}
 
     <div class="stat-row">
         <span class="stat-label">🔥 Daily Streak:</span>
