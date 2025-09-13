@@ -87,6 +87,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 case 'completeBossBattle':
                     vscode.commands.executeCommand('codequest.completeBossBattle');
                     break;
+                case 'toggleSubtask':
+                    vscode.commands.executeCommand('codequest.toggleSubtask', data.subtaskId);
+                    break;
                 case 'resetStats':
                     vscode.commands.executeCommand('codequest.resetStats');
                     break;
@@ -157,16 +160,67 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             console.log('CodeQuest: Animation frame:', this.animationFrame);
             console.log('CodeQuest: Boss images array:', bossImages.map(img => img?.toString()));
             console.log('CodeQuest: Selected boss image:', currentImage);
+            
+            // Get boss battle details for progress display
+            const currentBoss = stats.currentBossBattle;
+            const progressPercentage = currentBoss ? Math.min(100, (currentBoss.currentLines / currentBoss.targetLines) * 100) : 0;
+            const allSubtasksCompleted = currentBoss?.subtasks?.every(st => st.completed) || false;
+            
+            // Generate subtasks HTML
+            let subtasksHtml = '';
+            if (currentBoss?.subtasks && currentBoss.subtasks.length > 0) {
+                subtasksHtml = `
+                    <div style="margin: 15px 0; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 5px;">
+                        <h4 style="margin: 0 0 10px 0; color: #fff;">📋 Subtasks:</h4>
+                        ${currentBoss.subtasks.map(subtask => `
+                            <div style="margin: 8px 0; padding: 5px; background: rgba(255,255,255,0.1); border-radius: 3px; display: flex; align-items: center;">
+                                <input type="checkbox" 
+                                       id="${subtask.id}" 
+                                       ${subtask.completed ? 'checked' : ''} 
+                                       onchange="toggleSubtask('${subtask.id}')"
+                                       style="margin-right: 8px; transform: scale(1.2);">
+                                <label for="${subtask.id}" 
+                                       style="flex: 1; color: ${subtask.completed ? '#90EE90' : '#fff'}; 
+                                              text-decoration: ${subtask.completed ? 'line-through' : 'none'};">
+                                    ${subtask.description}
+                                </label>
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+            }
+            
             imageSection = `
                 <div class="game-section boss-section">
                     <h3>🐉 BOSS BATTLE! 🐉</h3>
+                    <h4>${currentBoss?.name || 'Unknown Boss'}</h4>
                     <img src="${currentImage}" alt="Knight Fighting Dragon" class="game-image" 
-                         onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
+                        onerror="this.style.display='none'; this.nextElementSibling.style.display='block';" />
                     <div style="display:none; color: red; padding: 10px; background: rgba(255,0,0,0.1);">
                         ❌ Image failed to load: ${currentImage}
                     </div>
                     <p>⚔️ EPIC DRAGON BATTLE! ⚔️</p>
                     <p>🔥 Combo: ${stats.combo}x 🔥</p>
+                    
+                    ${subtasksHtml}
+                    
+                    <div style="margin: 15px 0; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 5px;">
+                        <div style="margin-bottom: 8px;">
+                            <strong>Progress: ${currentBoss?.currentLines || 0}/${currentBoss?.targetLines || 0} lines</strong>
+                        </div>
+                        <div style="background: #333; border-radius: 10px; height: 10px; margin-bottom: 10px;">
+                            <div style="background: linear-gradient(to right, #ff6b6b, #ffd93d); height: 100%; border-radius: 10px; width: ${progressPercentage}%; transition: width 0.3s ease;"></div>
+                        </div>
+                        <button onclick="completeBossBattle()" 
+                                style="background: ${allSubtasksCompleted ? '#28a745' : '#6c757d'}; 
+                                       color: white; border: none; padding: 10px 15px; border-radius: 5px; margin: 5px; 
+                                       cursor: ${allSubtasksCompleted ? 'pointer' : 'not-allowed'}; font-weight: bold;
+                                       opacity: ${allSubtasksCompleted ? '1' : '0.6'};"
+                                ${allSubtasksCompleted ? '' : 'disabled'}>
+                            ✅ Complete Boss Battle${allSubtasksCompleted ? '' : ' (Complete all subtasks first)'}
+                        </button>
+                    </div>
+                    
                     <div style="font-size: 10px; color: #888; margin: 10px; padding: 10px; background: rgba(0,0,0,0.2);">
                         <strong>Debug Info:</strong><br>
                         Frame: ${this.animationFrame}<br>
@@ -312,6 +366,14 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         
         function startBossBattle() {
             vscode.postMessage({ type: 'startBossBattle' });
+        }
+        
+        function completeBossBattle() {
+            vscode.postMessage({ type: 'completeBossBattle' });
+        }
+        
+        function toggleSubtask(subtaskId) {
+            vscode.postMessage({ type: 'toggleSubtask', subtaskId: subtaskId });
         }
     </script>
 </body>

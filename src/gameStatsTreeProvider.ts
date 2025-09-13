@@ -2,16 +2,74 @@ import * as vscode from 'vscode';
 import { GameState } from './gameState';
 import { VisualEngine } from './visualEngine';
 
+interface TemporaryAchievement {
+    id: string;
+    label: string;
+    timestamp: number;
+    displayDuration: number; // in milliseconds
+}
+
 export class GameStatsTreeProvider implements vscode.TreeDataProvider<GameStatItem> {
     private _onDidChangeTreeData: vscode.EventEmitter<GameStatItem | undefined | null | void> = new vscode.EventEmitter<GameStatItem | undefined | null | void>();
     readonly onDidChangeTreeData: vscode.Event<GameStatItem | undefined | null | void> = this._onDidChangeTreeData.event;
     
     private visualEngine: VisualEngine;
     private lastWordsTyped: number = 0;
+    private temporaryAchievements: TemporaryAchievement[] = [];
+    private cleanupTimer: NodeJS.Timeout | null = null;
+    private readonly ACHIEVEMENT_DISPLAY_DURATION = 30000; // 30 seconds
 
     constructor(private gameState: GameState) {
         console.log('CodeQuest: GameStatsTreeProvider created');
         this.visualEngine = new VisualEngine(gameState);
+        this.startCleanupTimer();
+    }
+
+    private startCleanupTimer(): void {
+        // Clean up old achievements every 5 seconds
+        this.cleanupTimer = setInterval(() => {
+            this.cleanupOldAchievements();
+        }, 5000);
+    }
+
+    private cleanupOldAchievements(): void {
+        const now = Date.now();
+        const initialCount = this.temporaryAchievements.length;
+        
+        this.temporaryAchievements = this.temporaryAchievements.filter(achievement => {
+            return (now - achievement.timestamp) < achievement.displayDuration;
+        });
+        
+        // If we removed any achievements, refresh the tree
+        if (this.temporaryAchievements.length !== initialCount) {
+            console.log(`CodeQuest: Cleaned up ${initialCount - this.temporaryAchievements.length} old achievements`);
+            this._onDidChangeTreeData.fire();
+        }
+    }
+
+    private addTemporaryAchievement(id: string, label: string, duration: number = this.ACHIEVEMENT_DISPLAY_DURATION): void {
+        // Check if this achievement already exists
+        const existingIndex = this.temporaryAchievements.findIndex(a => a.id === id);
+        if (existingIndex !== -1) {
+            // Update existing achievement timestamp
+            this.temporaryAchievements[existingIndex].timestamp = Date.now();
+        } else {
+            // Add new achievement
+            this.temporaryAchievements.push({
+                id,
+                label,
+                timestamp: Date.now(),
+                displayDuration: duration
+            });
+        }
+        this._onDidChangeTreeData.fire();
+    }
+
+    public dispose(): void {
+        if (this.cleanupTimer) {
+            clearInterval(this.cleanupTimer);
+            this.cleanupTimer = null;
+        }
     }
 
     refresh(wordsTyped: number = 0, hasAI: boolean = false): void {
@@ -62,26 +120,44 @@ export class GameStatsTreeProvider implements vscode.TreeDataProvider<GameStatIt
             if (stats.currentBossBattle) {
                 items.push(new GameStatItem("═══ BOSS OBJECTIVES ═══", vscode.TreeItemCollapsibleState.None));
                 
-                // Auto-generate checkpoints based on progress
+                // Auto-generate checkpoints based on progress and add as temporary achievements when completed
                 const totalLines = stats.currentBossBattle.targetLines;
                 const currentLines = stats.currentBossBattle.currentLines;
                 const checkpoints = [
-                    { threshold: Math.floor(totalLines * 0.25), name: "🎯 First Quarter" },
-                    { threshold: Math.floor(totalLines * 0.5), name: "🎯 Halfway Point" },
-                    { threshold: Math.floor(totalLines * 0.75), name: "🎯 Three Quarters" },
-                    { threshold: totalLines, name: "🏆 VICTORY!" }
+                    { threshold: Math.floor(totalLines * 0.25), name: "🎯 First Quarter", id: "quarter" },
+                    { threshold: Math.floor(totalLines * 0.5), name: "🎯 Halfway Point", id: "halfway" },
+                    { threshold: Math.floor(totalLines * 0.75), name: "🎯 Three Quarters", id: "threequarter" },
+                    { threshold: totalLines, name: "🏆 VICTORY!", id: "victory" }
                 ];
                 
                 checkpoints.forEach(checkpoint => {
                     const completed = currentLines >= checkpoint.threshold;
-                    const status = completed ? "✅" : "⏳";
-                    const item = new GameStatItem(
-                        `${status} ${checkpoint.name} (${checkpoint.threshold} lines)`,
-                        vscode.TreeItemCollapsibleState.None
-                    );
+                    
                     if (completed) {
-                        item.description = "Completed!";
+                        // Add completed checkpoint as temporary achievement (20 seconds display)
+                        this.addTemporaryAchievement(
+                            `checkpoint_${checkpoint.id}`,
+                            `✅ ${checkpoint.name} (${checkpoint.threshold} lines) Completed!`,
+                            20000 // 20 seconds
+                        );
+                    } else {
+                        // Only show incomplete checkpoints in the permanent list
+                        const item = new GameStatItem(
+                            `⏳ ${checkpoint.name} (${checkpoint.threshold} lines)`,
+                            vscode.TreeItemCollapsibleState.None
+                        );
+                        items.push(item);
                     }
+                });
+            }
+            
+            // Add temporary achievements (they will auto-cleanup after their duration)
+            if (this.temporaryAchievements.length > 0) {
+                items.push(new GameStatItem("═══ RECENT ACHIEVEMENTS ═══", vscode.TreeItemCollapsibleState.None));
+                this.temporaryAchievements.forEach(achievement => {
+                    const timeLeft = Math.ceil((achievement.displayDuration - (Date.now() - achievement.timestamp)) / 1000);
+                    const item = new GameStatItem(achievement.label, vscode.TreeItemCollapsibleState.None);
+                    item.description = `${timeLeft}s remaining`;
                     items.push(item);
                 });
             }

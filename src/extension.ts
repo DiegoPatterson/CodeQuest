@@ -81,6 +81,16 @@ export function activate(context: vscode.ExtensionContext) {
             sidebarProvider.refresh();
             treeProvider.refresh();
         }),
+        vscode.commands.registerCommand('codequest.toggleSubtask', (subtaskId: string) => {
+            gameState.toggleSubtask(subtaskId);
+            sidebarProvider.refresh();
+            treeProvider.refresh();
+        }),
+        vscode.commands.registerCommand('codequest.killBossBattle', () => {
+            gameState.killBossBattle();
+            sidebarProvider.refresh();
+            treeProvider.refresh();
+        }),
         vscode.commands.registerCommand('codequest.resetStats', () => {
             gameState.resetStats();
             sidebarProvider.refresh();
@@ -119,14 +129,46 @@ async function startBossBattle() {
         placeHolder: 'e.g., "Implement user authentication system"'
     });
     
-    if (taskName) {
-        gameState.startBossBattle(taskName);
-        sidebarProvider.refresh();
-        treeProvider.refresh();
-        vscode.window.showInformationMessage(`🐉 Boss Battle Started: ${taskName}`);
+    if (!taskName) {
+        return;
     }
+    
+    // Collect subtasks
+    const subtasks: string[] = [];
+    let addingSubtasks = true;
+    
+    while (addingSubtasks) {
+        const subtask = await vscode.window.showInputBox({
+            prompt: `Add subtask #${subtasks.length + 1} for "${taskName}" (or press Escape to finish)`,
+            placeHolder: 'e.g., "Create user model", "Set up authentication middleware"'
+        });
+        
+        if (subtask && subtask.trim()) {
+            subtasks.push(subtask.trim());
+        } else {
+            addingSubtasks = false;
+        }
+        
+        // Stop after 10 subtasks to prevent infinite loops
+        if (subtasks.length >= 10) {
+            addingSubtasks = false;
+        }
+    }
+    
+    // If no subtasks were added, add a default one
+    if (subtasks.length === 0) {
+        subtasks.push("Complete the implementation");
+    }
+    
+    gameState.startBossBattle(taskName, subtasks);
+    sidebarProvider.refresh();
+    treeProvider.refresh();
+    vscode.window.showInformationMessage(`🐉 Boss Battle Started: ${taskName} (${subtasks.length} subtasks)`);
 }
 
 export function deactivate() {
     console.log('CodeQuest: Extension deactivated');
+    if (treeProvider && typeof treeProvider.dispose === 'function') {
+        treeProvider.dispose();
+    }
 }

@@ -32,6 +32,11 @@
         "category": "CodeQuest"
       },
       {
+        "command": "codequest.killBossBattle",
+        "title": "Kill Boss Battle",
+        "category": "CodeQuest"
+      },
+      {
         "command": "codequest.resetStats",
         "title": "Reset All Stats",
         "category": "CodeQuest"

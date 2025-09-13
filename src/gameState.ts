@@ -13,12 +13,19 @@ export interface PlayerStats {
     currentBossBattle?: BossBattle;
 }
 
+export interface BossSubtask {
+    id: string;
+    description: string;
+    completed: boolean;
+}
+
 export interface BossBattle {
     name: string;
     startTime: number;
     targetLines: number;
     currentLines: number;
     completed: boolean;
+    subtasks: BossSubtask[];
 }
 
 export class GameState {
@@ -184,9 +191,7 @@ export class GameState {
         // Update boss battle progress
         if (this.stats.currentBossBattle && !this.stats.currentBossBattle.completed) {
             this.stats.currentBossBattle.currentLines += lines;
-            if (this.stats.currentBossBattle.currentLines >= this.stats.currentBossBattle.targetLines) {
-                this.completeBossBattle();
-            }
+            // Note: Boss battle completion is now manual only - no auto-completion
         }
         
         this.saveStats();
@@ -198,22 +203,61 @@ export class GameState {
         this.breakCombo();
     }
 
-    startBossBattle(name: string) {
+    startBossBattle(name: string, subtaskDescriptions: string[] = []) {
         const targetLines = Math.max(20, Math.floor(Math.random() * 100) + 20);
+        
+        // Convert subtask descriptions to BossSubtask objects
+        const subtasks: BossSubtask[] = subtaskDescriptions.map((desc, index) => ({
+            id: `subtask_${index}`,
+            description: desc,
+            completed: false
+        }));
+        
         this.stats.currentBossBattle = {
             name,
             startTime: Date.now(),
             targetLines,
             currentLines: 0,
-            completed: false
+            completed: false,
+            subtasks
         };
         console.log('GameState: Boss battle started!');
         console.log('GameState: Boss battle details:', this.stats.currentBossBattle);
         this.saveStats();
     }
 
+    toggleSubtask(subtaskId: string) {
+        if (this.stats.currentBossBattle && !this.stats.currentBossBattle.completed) {
+            const subtask = this.stats.currentBossBattle.subtasks.find(st => st.id === subtaskId);
+            if (subtask) {
+                subtask.completed = !subtask.completed;
+                console.log(`GameState: Toggled subtask "${subtask.description}" to ${subtask.completed ? 'completed' : 'incomplete'}`);
+                this.saveStats();
+            }
+        }
+    }
+
+    canCompleteBossBattle(): boolean {
+        if (!this.stats.currentBossBattle || this.stats.currentBossBattle.completed) {
+            return false;
+        }
+        
+        // All subtasks must be completed
+        return this.stats.currentBossBattle.subtasks.every(subtask => subtask.completed);
+    }
+
     completeBossBattle() {
         if (this.stats.currentBossBattle && !this.stats.currentBossBattle.completed) {
+            // Check if all subtasks are completed
+            if (!this.canCompleteBossBattle()) {
+                const incompleteSubtasks = this.stats.currentBossBattle.subtasks
+                    .filter(st => !st.completed)
+                    .map(st => st.description)
+                    .join(', ');
+                vscode.window.showWarningMessage(`❌ Cannot complete boss battle! Please finish these subtasks first: ${incompleteSubtasks}`);
+                return;
+            }
+            
             const battle = this.stats.currentBossBattle;
             battle.completed = true;
             
@@ -227,6 +271,17 @@ export class GameState {
             
             this.stats.currentBossBattle = undefined;
             this.saveStats();
+        }
+    }
+
+    killBossBattle() {
+        if (this.stats.currentBossBattle) {
+            const battleName = this.stats.currentBossBattle.name;
+            this.stats.currentBossBattle = undefined;
+            this.saveStats();
+            vscode.window.showInformationMessage(`🚫 Boss Battle Cancelled: ${battleName}`);
+        } else {
+            vscode.window.showInformationMessage(`No active boss battle to cancel.`);
         }
     }
 
