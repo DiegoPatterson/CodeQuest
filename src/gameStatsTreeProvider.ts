@@ -61,6 +61,15 @@ export class GameStatsTreeProvider implements vscode.TreeDataProvider<GameStatIt
                 timestamp: Date.now(),
                 displayDuration: duration
             });
+            
+            // Limit to max 1 achievement - remove oldest if exceeded
+            const MAX_ACHIEVEMENTS = 1;
+            if (this.temporaryAchievements.length > MAX_ACHIEVEMENTS) {
+                // Sort by timestamp (oldest first) and remove the oldest
+                this.temporaryAchievements.sort((a, b) => a.timestamp - b.timestamp);
+                const removed = this.temporaryAchievements.splice(0, this.temporaryAchievements.length - MAX_ACHIEVEMENTS);
+                console.log(`CodeQuest: Removed ${removed.length} old achievements to maintain max of ${MAX_ACHIEVEMENTS}`);
+            }
         }
         this._onDidChangeTreeData.fire();
     }

@@ -75,6 +75,9 @@ export class VisualEngine {
         const timeSinceLastTyping = lastTypingTime > 0 ? now - lastTypingTime : 999999;
         const shouldShowIdle = timeSinceLastTyping > this.IDLE_DELAY && stats.combo === 0;
         
+        // Check wizard presence
+        const wizardActive = this.gameState.isWizardActive();
+        
         // Update visual state for webview
         if (stats.currentBossBattle) {
             console.log('VisualEngine: Boss battle detected!', stats.currentBossBattle);
@@ -88,7 +91,10 @@ export class VisualEngine {
             this.visualState.useImages = false; // Fighting will show images in webview regardless
         }
         
-        console.log(`CodeQuest Visual: state=${this.visualState.playerState}, useImages=${this.visualState.useImages}`);
+        // Update wizard presence
+        this.visualState.wizardPresent = wizardActive;
+        
+        console.log(`CodeQuest Visual: state=${this.visualState.playerState}, useImages=${this.visualState.useImages}, wizard=${wizardActive}`);
     }
 
     updateVisual(wordsTyped: number, hasAI: boolean = false): string[] {

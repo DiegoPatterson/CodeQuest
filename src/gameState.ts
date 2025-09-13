@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { SoundManager } from './soundManager';
 
 export interface PlayerStats {
     level: number;
@@ -30,11 +31,23 @@ export interface BossBattle {
 
 export class GameState {
     private context: vscode.ExtensionContext;
+    private soundManager?: SoundManager;
     private lastTypingTime: number = 0;
     private comboDecayTimer: NodeJS.Timeout | null = null;
     private refreshCallback: (() => void) | null = null;
     private multiplierCallback: ((combo: number) => void) | null = null;
     private impactFrameCallback: (() => void) | null = null;
+    
+    // Rate limiting for combo increments
+    private lastComboIncrement: number = 0;
+    private comboIncrementCooldown: number = 50; // Minimum 50ms between combo increments
+    private recentIncrements: number[] = [];
+    
+    // Wizard session tracking
+    private wizardSessions: number = 0;
+    private lastWizardActivity: number = 0;
+    private wizardSessionActive: boolean = false;
+    private readonly WIZARD_SESSION_TIMEOUT = 5000; // 5 seconds
     private stats: PlayerStats = {
         level: 1,
         xp: 0,
@@ -47,8 +60,9 @@ export class GameState {
         bossBattlesWon: 0
     };
 
-    constructor(context: vscode.ExtensionContext) {
+    constructor(context: vscode.ExtensionContext, soundManager?: SoundManager) {
         this.context = context;
+        this.soundManager = soundManager;
         this.loadStats();
         this.startComboDecaySystem();
     }
@@ -63,6 +77,55 @@ export class GameState {
 
     setImpactFrameCallback(callback: () => void) {
         this.impactFrameCallback = callback;
+    }
+
+    // Wizard session management
+    recordWizardActivity() {
+        const currentTime = Date.now();
+        
+        // If no recent wizard activity, start a new session
+        if (!this.wizardSessionActive || (currentTime - this.lastWizardActivity) > this.WIZARD_SESSION_TIMEOUT) {
+            this.wizardSessions++;
+            this.wizardSessionActive = true;
+            console.log('CodeQuest: New wizard session started. Total sessions:', this.wizardSessions);
+            
+            // Play wizard appear sound for new sessions
+            if (this.soundManager) {
+                this.soundManager.playWizardAppear();
+            }
+        } else {
+            console.log('CodeQuest: Extending existing wizard session');
+        }
+        
+        this.lastWizardActivity = currentTime;
+        console.log('CodeQuest: Wizard activity recorded. Active:', this.wizardSessionActive);
+    }
+
+    isWizardActive(): boolean {
+        const currentTime = Date.now();
+        
+        // Check if wizard session has timed out
+        if (this.wizardSessionActive && (currentTime - this.lastWizardActivity) > this.WIZARD_SESSION_TIMEOUT) {
+            this.wizardSessionActive = false;
+            console.log('CodeQuest: Wizard session timed out');
+        }
+        
+        console.log('CodeQuest: isWizardActive check - Active:', this.wizardSessionActive, 'Time since last activity:', currentTime - this.lastWizardActivity);
+        return this.wizardSessionActive;
+    }
+
+    getWizardStats() {
+        return {
+            totalSessions: this.wizardSessions,
+            currentlyActive: this.isWizardActive(),
+            lastActivity: this.lastWizardActivity
+        };
+    }
+
+    killWizardSession() {
+        this.wizardSessionActive = false;
+        this.lastWizardActivity = 0;
+        console.log('CodeQuest: Wizard session manually terminated');
     }
 
     private startComboDecaySystem() {
@@ -136,6 +199,11 @@ export class GameState {
         this.stats.level++;
         this.stats.xpToNextLevel = Math.floor(this.stats.xpToNextLevel * 1.5);
         
+        // Play level up sound
+        if (this.soundManager) {
+            this.soundManager.playLevelUp();
+        }
+        
         // Enhanced level up messages with achievements
         let message = `🎉 LEVEL UP! Welcome to Level ${this.stats.level}!`;
         let extraReward = '';
@@ -158,13 +226,42 @@ export class GameState {
     }
 
     incrementCombo() {
+        const now = Date.now();
+        
+        // Rate limiting: prevent combo spam from large text insertions
+        if (now - this.lastComboIncrement < this.comboIncrementCooldown) {
+            console.log('CodeQuest: Combo increment rate limited, skipping');
+            return;
+        }
+        
+        // Track recent increments to detect bulk operations
+        this.recentIncrements.push(now);
+        
+        // Keep only last 20 increments for analysis
+        if (this.recentIncrements.length > 20) {
+            this.recentIncrements = this.recentIncrements.slice(-20);
+        }
+        
+        // If too many increments in short time, increase cooldown (likely large paste/AI)
+        if (this.recentIncrements.length >= 10) {
+            const timeSpan = now - this.recentIncrements[0];
+            if (timeSpan < 2000) { // 10+ increments in 2 seconds
+                this.comboIncrementCooldown = 200; // Increase cooldown significantly
+                console.log('CodeQuest: Bulk operation detected, increasing combo cooldown');
+            } else {
+                this.comboIncrementCooldown = 50; // Normal cooldown
+            }
+        }
+        
+        this.lastComboIncrement = now;
+        
         this.updateTypingTime(); // Track when user last typed
         this.stats.combo++;
         if (this.stats.combo > this.stats.maxCombo) {
             this.stats.maxCombo = this.stats.combo;
         }
         
-        // Trigger impact frame on every typing event
+        // Trigger impact frame on every typing event (rate limited in sidebarProvider)
         if (this.impactFrameCallback) {
             this.impactFrameCallback();
         }
@@ -177,12 +274,24 @@ export class GameState {
         // Special combo milestone notifications
         if (this.stats.combo === 10) {
             vscode.window.showInformationMessage(`🔥 HOT STREAK! 10x combo achieved!`);
+            if (this.soundManager) {
+                this.soundManager.playComboMilestone();
+            }
         } else if (this.stats.combo === 25) {
             vscode.window.showInformationMessage(`⚡ SUPER COMBO! 25x combo - You're on fire!`);
+            if (this.soundManager) {
+                this.soundManager.playComboMilestone();
+            }
         } else if (this.stats.combo === 50) {
             vscode.window.showInformationMessage(`🌟 MEGA COMBO! 50x combo - UNSTOPPABLE!`);
+            if (this.soundManager) {
+                this.soundManager.playComboMilestone();
+            }
         } else if (this.stats.combo === 100) {
             vscode.window.showInformationMessage(`💫 LEGENDARY COMBO! 100x combo - CODING MASTER!`);
+            if (this.soundManager) {
+                this.soundManager.playComboMilestone();
+            }
         }
         
         // Combo bonuses - more frequent and varied

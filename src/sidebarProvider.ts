@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { GameState } from './gameState';
 import { VisualEngine } from './visualEngine';
+import { SoundManager } from './soundManager';
 
 export class SidebarProvider implements vscode.WebviewViewProvider {
     public static readonly viewType = 'codequest.webview';
@@ -11,10 +12,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private animationTimer?: NodeJS.Timeout;
     private currentMultiplier: number = 1;
     private multiplierVisible: boolean = false;
+    private idleWizardTimer?: NodeJS.Timeout;
+    private lastPlayerState: string = '';
+    
+    // Rate limiting for animations
+    private lastAnimationTrigger: number = 0;
+    private animationCooldown: number = 100; // Minimum 100ms between animations
+    private typingVelocityTracker: number[] = [];
+    private lastTypingTime: number = 0;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
-        private gameState: GameState
+        private gameState: GameState,
+        private soundManager?: SoundManager
     ) { 
         console.log('CodeQuest: SidebarProvider constructor called');
         console.log('CodeQuest: Extension URI:', _extensionUri?.toString());
@@ -43,6 +53,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         this.gameState.setImpactFrameCallback(() => {
             this.triggerImpactFrame();
         });
+
+        // Set up random idle wizard appearances
+        this.startIdleWizardTimer();
     }
 
     private startImageAnimation() {
@@ -52,22 +65,80 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
 
     public triggerImpactFrame() {
+        const now = Date.now();
+        
+        // Rate limiting: prevent animation spam
+        if (now - this.lastAnimationTrigger < this.animationCooldown) {
+            console.log('CodeQuest: Animation rate limited, skipping trigger');
+            return;
+        }
+        
+        // Track typing velocity to detect AI assistance patterns
+        this.typingVelocityTracker.push(now);
+        
+        // Keep only last 10 keystrokes for velocity calculation
+        if (this.typingVelocityTracker.length > 10) {
+            this.typingVelocityTracker = this.typingVelocityTracker.slice(-10);
+        }
+        
+        // Calculate WPM if we have enough data points
+        if (this.typingVelocityTracker.length >= 5) {
+            const timeSpan = now - this.typingVelocityTracker[0];
+            const wpm = (this.typingVelocityTracker.length * 60000) / (timeSpan * 5); // Rough WPM calculation
+            
+            // If typing faster than 300 WPM, increase cooldown (likely AI assistance)
+            if (wpm > 300) {
+                this.animationCooldown = 300; // Slow down animations during AI assistance
+                console.log('CodeQuest: High WPM detected (' + Math.round(wpm) + '), increasing animation cooldown');
+            } else {
+                this.animationCooldown = 100; // Normal cooldown
+            }
+        }
+        
+        this.lastAnimationTrigger = now;
+        
         // Trigger frame switch for impact effect when typing
         const visualState = this.visualEngine.getVisualState();
         
+        console.log('CodeQuest: triggerImpactFrame - Current state:', visualState.playerState, 'Current frame:', this.animationFrame);
+        
         if (visualState.playerState === 'boss_battle') {
-            // Boss battle: switch between 2 dragon images (0, 1)
-            this.animationFrame = (this.animationFrame + 1) % 2;
+            // Boss battle: flash to Dragon 2 (frame 1) for impact
+            this.animationFrame = 1;
+            
+            // Play boss hit sound
+            if (this.soundManager) {
+                this.soundManager.playBossHit(this._view?.webview);
+            }
+            
+            // Return to Dragon 1 (frame 0) after brief flash
+            setTimeout(() => {
+                this.animationFrame = 0;
+                this.refresh();
+            }, 150); // 150ms flash duration
         } else if (visualState.playerState === 'fighting') {
             // Combat state: switch between 2 slime images (0, 1)
+            const oldFrame = this.animationFrame;
             this.animationFrame = (this.animationFrame + 1) % 2;
+            console.log('CodeQuest: Slime combat - Frame switched from', oldFrame, 'to', this.animationFrame);
+            
+            // Play combat hit sound
+            if (this.soundManager) {
+                this.soundManager.playCombatHit(this._view?.webview);
+            }
         }
         // Idle state stays static (no frame switching)
         
         // Refresh the webview to show the new frame
-        if (this._view) {
-            this._view.webview.html = this._getHtmlForWebview();
-        }
+        this.refresh();
+    }
+
+    private resetAnimationFrame() {
+        // Reset animation frame when state changes to prevent getting stuck
+        const visualState = this.visualEngine.getVisualState();
+        console.log('CodeQuest: Resetting animation frame for state:', visualState.playerState);
+        this.animationFrame = 0;
+        this.refresh();
     }
 
     private showMultiplier(combo: number) {
@@ -102,6 +173,30 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
         // Note: Each multiplier now manages its own lifecycle (4 seconds)
         // No global hide timer needed since they can stack
+    }
+
+    private startIdleWizardTimer() {
+        // Random wizard appearances in idle mode every 30-60 seconds
+        const scheduleNextWizard = () => {
+            const randomDelay = 30000 + Math.random() * 30000; // 30-60 seconds
+            this.idleWizardTimer = setTimeout(() => {
+                const visualState = this.visualEngine.getVisualState();
+                if (visualState.playerState === 'idle') {
+                    console.log('CodeQuest: Random wizard appearance in idle!');
+                    // Temporarily activate wizard for 3 seconds
+                    this.gameState.recordWizardActivity();
+                    this.refresh();
+                    
+                    // Turn off wizard after 3 seconds
+                    setTimeout(() => {
+                        this.gameState.killWizardSession();
+                        this.refresh();
+                    }, 3000);
+                }
+                scheduleNextWizard(); // Schedule the next appearance
+            }, randomDelay);
+        };
+        scheduleNextWizard();
     }
 
     resolveWebviewView(webviewView: vscode.WebviewView) {
@@ -150,13 +245,16 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     refresh() {
         if (this._view) {
-            // Check if we should use images for idle state
-            const shouldUseImages = this.visualEngine.shouldUseImages();
-            console.log('CodeQuest: Refresh - should use images:', shouldUseImages);
+            console.log('CodeQuest: Refreshing sidebar view...');
+            // Force refresh of visual state before getting HTML
+            this.visualEngine.getVisualState(); // This calls refreshVisualState internally
             
-            if (shouldUseImages) {
-                // Cycle animation frame for alternating images
-                this.animationFrame = (this.animationFrame + 1) % 2;
+            // Check if player state changed and reset animation frame if needed
+            const currentVisualState = this.visualEngine.getVisualState();
+            if (this.lastPlayerState !== currentVisualState.playerState) {
+                console.log('CodeQuest: Player state changed from', this.lastPlayerState, 'to', currentVisualState.playerState);
+                this.animationFrame = 0; // Reset animation frame
+                this.lastPlayerState = currentVisualState.playerState;
             }
             
             this._view.webview.html = this._getHtmlForWebview();
@@ -204,8 +302,20 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             // Get boss battle details for progress display
             currentBoss = stats.currentBossBattle;
             allSubtasksCompleted = currentBoss?.subtasks?.every((st: any) => st.completed) || false;
-            // Boss Battle state: cycle between 2 knight vs dragon images - HIGHEST PRIORITY
-            const bossImages = [
+            
+            // Check if wizard is present for AI assistance
+            const isWizardActive = visualState.wizardPresent;
+            console.log('CodeQuest: Boss battle - Wizard active?', isWizardActive, 'Visual state:', visualState);
+            
+            // Boss Battle state: choose between knight vs dragon or wizard vs dragon based on AI assistance
+            const bossImages = isWizardActive ? [
+                this._view?.webview.asWebviewUri(
+                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'AI V Dragon', 'Wizard V Dragon 1.png')
+                ),
+                this._view?.webview.asWebviewUri(
+                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'AI V Dragon', 'Wizard V Dragon 2.png')
+                )
+            ] : [
                 this._view?.webview.asWebviewUri(
                     vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Boss', 'Knight V Dragon 1.png')
                 ),
@@ -214,7 +324,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 )
             ];
             currentImage = bossImages[this.animationFrame % 2]?.toString() || '';
-            console.log('CodeQuest: Boss battle mode detected!');
+            console.log('CodeQuest: Selected boss image:', currentImage, 'Frame:', this.animationFrame);
             console.log('CodeQuest: Animation frame:', this.animationFrame);
             console.log('CodeQuest: Boss images array:', bossImages.map(img => img?.toString()));
             console.log('CodeQuest: Selected boss image:', currentImage);
@@ -242,18 +352,35 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 imageSection = '';
             }
         } else if (isIdle) {
-            // Idle state: static single image (no cycling)
-            const idleImages = [
+            // Idle state: choose between knight or wizard based on AI assistance or random wizard
+            const isWizardActive = visualState.wizardPresent;
+            console.log('CodeQuest: Idle mode - Wizard active?', isWizardActive);
+            
+            const idleImages = isWizardActive ? [
+                this._view?.webview.asWebviewUri(
+                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Idle', 'pixel art of a knight 2.png')
+                )
+            ] : [
                 this._view?.webview.asWebviewUri(
                     vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Idle', 'pixel art of a knight 1.png')
                 )
             ];
             currentImage = idleImages[0]?.toString() || '';
-            console.log('CodeQuest: Idle image selected (static):', currentImage);
+            console.log('CodeQuest: Selected idle image:', currentImage);
             imageSection = ''; // No extra section needed for idle state
         } else if (isFighting) {
-            // Combat state: cycle between 2 knight vs slime images (removed 3rd image)
-            const combatImages = [
+            // Combat state: choose between knight vs slime or wizard vs slime based on AI assistance
+            const isWizardActive = visualState.wizardPresent;
+            console.log('CodeQuest: Combat mode - Wizard active?', isWizardActive, 'Visual state:', visualState);
+            
+            const combatImages = isWizardActive ? [
+                this._view?.webview.asWebviewUri(
+                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'AI V Slime', 'Wizard V Slime 1.png')
+                ),
+                this._view?.webview.asWebviewUri(
+                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'AI V Slime', 'Wizard V Slime 2.png')
+                )
+            ] : [
                 this._view?.webview.asWebviewUri(
                     vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Slime', 'Knight V Slime 1.png')
                 ),
@@ -262,7 +389,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 )
             ];
             currentImage = combatImages[this.animationFrame % 2]?.toString() || '';
-            console.log('CodeQuest: Combat image selected:', currentImage);
+            console.log('CodeQuest: Selected combat image:', currentImage, 'Frame:', this.animationFrame);
             imageSection = ''; // No extra section needed for combat state
         } else {
             // Default state - set a test image
@@ -427,6 +554,47 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             vscode.postMessage({ type: 'toggleSubtask', subtaskId: subtaskId });
         }
         
+        // Sound effects system using Web Audio API
+        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        const soundLibrary = {
+            'combat-hit': { frequency: 800, duration: 0.1, type: 'square' },
+            'boss-hit': { frequency: 400, duration: 0.2, type: 'sawtooth' },
+            'level-up': { frequency: 523.25, duration: 0.5, type: 'sine' }, // C5 note
+            'achievement': { frequency: 659.25, duration: 0.3, type: 'sine' }, // E5 note
+            'combo-milestone': { frequency: 783.99, duration: 0.2, type: 'sine' }, // G5 note
+            'wizard-appear': { frequency: 880, duration: 0.3, type: 'triangle' } // A5 note
+        };
+        
+        function playSound(soundName, volume = 0.5) {
+            try {
+                const sound = soundLibrary[soundName];
+                if (!sound) {
+                    console.log('CodeQuest: Unknown sound:', soundName);
+                    return;
+                }
+                
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+                
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+                
+                oscillator.frequency.setValueAtTime(sound.frequency, audioContext.currentTime);
+                oscillator.type = sound.type;
+                
+                gainNode.gain.setValueAtTime(0, audioContext.currentTime);
+                gainNode.gain.linearRampToValueAtTime(volume * 0.3, audioContext.currentTime + 0.01);
+                gainNode.gain.exponentialRampToValueAtTime(0.001, audioContext.currentTime + sound.duration);
+                
+                oscillator.start(audioContext.currentTime);
+                oscillator.stop(audioContext.currentTime + sound.duration);
+                
+                console.log('CodeQuest: Played sound:', soundName);
+            } catch (error) {
+                console.log('CodeQuest: Error playing sound:', error);
+            }
+        }
+        
         // Handle multiplier display messages
         window.addEventListener('message', event => {
             const message = event.data;
@@ -434,6 +602,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             const knightImage = document.getElementById('knightImage');
             
             switch (message.type) {
+                case 'playSound':
+                    playSound(message.soundName, message.volume);
+                    break;
                 case 'showMultiplier':
                     // Create a new multiplier element
                     const multiplier = document.createElement('div');

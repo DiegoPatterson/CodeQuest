@@ -40,6 +40,28 @@
         "command": "codequest.resetStats",
         "title": "Reset All Stats",
         "category": "CodeQuest"
+      },
+      {
+        "command": "codequest.triggerWizard",
+        "title": "Trigger Wizard",
+        "category": "CodeQuest"
+      },
+      {
+        "command": "codequest.killWizard",
+        "title": "Kill Wizard",
+        "category": "CodeQuest"
+      },
+      {
+        "command": "codequest.toggleSounds",
+        "title": "Toggle Sound Effects",
+        "category": "CodeQuest",
+        "icon": "$(mute)"
+      },
+      {
+        "command": "codequest.setSoundVolume",
+        "title": "Set Sound Volume",
+        "category": "CodeQuest",
+        "icon": "$(unmute)"
       }
     ],
     "viewsContainers": {
@@ -65,6 +87,23 @@
           "when": "true"
         }
       ]
+    }
+  },
+  "configuration": {
+    "title": "CodeQuest",
+    "properties": {
+      "codequest.sounds.enabled": {
+        "type": "boolean",
+        "default": true,
+        "description": "Enable sound effects for CodeQuest"
+      },
+      "codequest.sounds.volume": {
+        "type": "number",
+        "default": 50,
+        "minimum": 0,
+        "maximum": 100,
+        "description": "Volume for CodeQuest sound effects (0-100)"
+      }
     }
   },
   "scripts": {
