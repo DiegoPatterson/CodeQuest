@@ -401,6 +401,7 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
 
     private _getHtmlForWebview() {
         const stats = this.gameState.getStats();
+        const achievements = this.gameState.getAchievementsForDisplay();
         console.log('CodeQuest: Getting stats for HTML:', stats);
         const xpPercentage = (stats.xp / stats.xpToNextLevel) * 100;
         
@@ -917,6 +918,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             gap: 12px;
             margin-top: 20px;
         }
+        
+        /* Reduced margin for boss button positioned after stats */
+        .stats-container + .action-buttons {
+            margin-top: 12px;
+        }
         .action-button {
             background: 
                 linear-gradient(145deg, #8B4513 0%, #CD853F 30%, #8B4513 70%, #654321 100%);
@@ -1404,6 +1410,171 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             z-index: 1;
             font-family: 'Courier New', monospace;
         }
+        
+        /* ==================== ACHIEVEMENT SYSTEM STYLES ==================== */
+        
+        .achievements-container {
+            background: 
+                linear-gradient(145deg, #4A4A4A 0%, #696969 30%, #4A4A4A 70%, #2F2F2F 100%);
+            border: 4px solid #2F2F2F;
+            border-radius: 12px;
+            padding: 16px;
+            margin: 15px 0;
+            position: relative;
+            box-shadow: 
+                inset 2px 2px 4px rgba(169, 169, 169, 0.3),
+                inset -2px -2px 4px rgba(47, 47, 47, 0.8),
+                4px 4px 8px rgba(0, 0, 0, 0.6);
+            /* Metallic texture */
+            background-image: 
+                repeating-linear-gradient(
+                    90deg,
+                    transparent,
+                    transparent 2px,
+                    rgba(47, 47, 47, 0.1) 2px,
+                    rgba(47, 47, 47, 0.1) 4px
+                );
+        }
+        
+        .achievements-header {
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        
+        .achievements-title {
+            color: #FFD700;
+            font-size: 16px;
+            font-weight: bold;
+            text-shadow: 
+                2px 2px 4px rgba(0, 0, 0, 0.9),
+                0 0 10px rgba(255, 215, 0, 0.5);
+            font-family: 'Courier New', monospace;
+            letter-spacing: 1px;
+        }
+        
+        .achievements-section {
+            margin-bottom: 15px;
+        }
+        
+        .section-title {
+            color: #D3D3D3;
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            padding-left: 4px;
+            font-family: 'Courier New', monospace;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+        }
+        
+        .achievements-list {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        
+        .achievement {
+            display: flex;
+            align-items: flex-start;
+            padding: 10px;
+            border-radius: 6px;
+            border-left: 4px solid #4A4A4A;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .achievement.temporary {
+            background: 
+                linear-gradient(145deg, rgba(139, 69, 19, 0.3) 0%, rgba(101, 67, 33, 0.5) 100%);
+            border-left-color: #CD853F;
+            animation: tempAchievementPulse 2s ease-in-out infinite alternate;
+        }
+        
+        .achievement.permanent {
+            background: 
+                linear-gradient(145deg, rgba(0, 128, 0, 0.3) 0%, rgba(34, 139, 34, 0.5) 100%);
+            border-left-color: #32CD32;
+        }
+        
+        @keyframes tempAchievementPulse {
+            0% { 
+                box-shadow: 
+                    inset 1px 1px 2px rgba(205, 133, 63, 0.2),
+                    2px 2px 4px rgba(0, 0, 0, 0.3);
+            }
+            100% { 
+                box-shadow: 
+                    inset 1px 1px 2px rgba(205, 133, 63, 0.4),
+                    2px 2px 6px rgba(0, 0, 0, 0.4),
+                    0 0 8px rgba(205, 133, 63, 0.3);
+            }
+        }
+        
+        .achievement:hover {
+            transform: translateX(2px);
+            box-shadow: 
+                inset 1px 1px 2px rgba(255, 255, 255, 0.1),
+                4px 4px 6px rgba(0, 0, 0, 0.5);
+        }
+        
+        .achievement-icon {
+            font-size: 18px;
+            margin-right: 10px;
+            flex-shrink: 0;
+            min-width: 24px;
+            text-align: center;
+            filter: drop-shadow(1px 1px 2px rgba(0, 0, 0, 0.8));
+        }
+        
+        .achievement-content {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .achievement-title {
+            font-size: 13px;
+            font-weight: bold;
+            color: #F5DEB3;
+            margin-bottom: 2px;
+            font-family: 'Courier New', monospace;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+            line-height: 1.2;
+        }
+        
+        .achievement-desc {
+            font-size: 11px;
+            color: rgba(245, 222, 179, 0.8);
+            line-height: 1.3;
+            font-family: 'Courier New', monospace;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.6);
+        }
+        
+        .achievement-fade {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, #CD853F, transparent);
+            animation: achievementFade 30s linear;
+        }
+        
+        .achievement.temporary .achievement-fade {
+            animation: achievementFade 30s linear;
+        }
+        
+        @keyframes achievementFade {
+            0% { width: 100%; }
+            100% { width: 0%; }
+        }
+        
+        .no-achievements {
+            text-align: center;
+            padding: 20px;
+            color: rgba(245, 222, 179, 0.6);
+            font-style: italic;
+            font-family: 'Courier New', monospace;
+        }
     </style>
 </head>
 <body>
@@ -1450,6 +1621,22 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         </div>
     </div>
     
+    <!-- Boss Battle Details (when active) -->
+    ${imageSection}
+    
+    <!-- Boss Battle Button -->
+    <div class="action-buttons">
+        ${isBossBattle ? 
+            `<button onclick="completeBossBattle()" class="action-button" 
+                     ${allSubtasksCompleted ? '' : 'disabled'}>
+                ✅ Complete Boss Battle
+             </button>` : 
+            `<button onclick="startBossBattle()" class="action-button">
+                🐉 Start Boss Battle
+             </button>`
+        }
+    </div>
+    
     <!-- Visual Combo Meter -->
     <div class="combo-container">
         <div class="combo-header">
@@ -1464,18 +1651,54 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         </div>
     </div>
     
-    ${imageSection}
-    
-    <div class="action-buttons">
-        ${isBossBattle ? 
-            `<button onclick="completeBossBattle()" class="action-button" 
-                     ${allSubtasksCompleted ? '' : 'disabled'}>
-                ✅ Complete Boss Battle
-             </button>` : 
-            `<button onclick="startBossBattle()" class="action-button">
-                🐉 Start Boss Battle
-             </button>`
-        }
+    <!-- Achievement System -->
+    <div class="achievements-container">
+        <div class="achievements-header">
+            <span class="achievements-title">🏆 ACHIEVEMENTS</span>
+        </div>
+        
+        ${achievements.temporary.length > 0 ? `
+        <div class="achievements-section">
+            <div class="section-title">⚡ Recent</div>
+            <div class="achievements-list temp-achievements">
+                ${achievements.temporary.map(achievement => `
+                    <div class="achievement temporary" data-timestamp="${achievement.timestamp}">
+                        <span class="achievement-icon">${achievement.icon}</span>
+                        <div class="achievement-content">
+                            <div class="achievement-title">${achievement.title}</div>
+                            <div class="achievement-desc">${achievement.description}</div>
+                        </div>
+                        <div class="achievement-fade"></div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+        ` : ''}
+        
+        ${achievements.permanent.length > 0 ? `
+        <div class="achievements-section">
+            <div class="section-title">💎 Milestones</div>
+            <div class="achievements-list permanent-achievements">
+                ${achievements.permanent.slice(0, 8).map(achievement => `
+                    <div class="achievement permanent">
+                        <span class="achievement-icon">${achievement.icon}</span>
+                        <div class="achievement-content">
+                            <div class="achievement-title">${achievement.title}</div>
+                            <div class="achievement-desc">${achievement.description}</div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+        ` : ''}
+        
+        ${achievements.temporary.length === 0 && achievements.permanent.length === 0 ? `
+        <div class="no-achievements">
+            <div style="text-align: center; padding: 20px; color: rgba(245, 222, 179, 0.6);">
+                🎯 Start coding to unlock achievements!
+            </div>
+        </div>
+        ` : ''}
     </div>
     
     <script>

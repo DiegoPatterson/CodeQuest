@@ -28,6 +28,23 @@ export interface BossBattle {
     subtasks: BossSubtask[];
 }
 
+export interface Achievement {
+    id: string;
+    title: string;
+    description: string;
+    icon: string;
+    type: 'temporary' | 'permanent';
+    timestamp: number;
+    category?: 'level' | 'combo' | 'boss' | 'streak' | 'milestone';
+    data?: any; // Additional context data
+}
+
+export interface AchievementStorage {
+    temporaryAchievements: Achievement[];
+    permanentAchievements: Achievement[];
+    lastCleanup: number;
+}
+
 export class GameState {
     private context: vscode.ExtensionContext;
     private lastTypingTime: number = 0;
@@ -63,6 +80,18 @@ export class GameState {
     // Memory optimization: Reduce object allocations
     private _tempDate: Date = new Date(); // Reuse date object
     
+    // Achievement system storage
+    private achievements: AchievementStorage = {
+        temporaryAchievements: [],
+        permanentAchievements: [],
+        lastCleanup: Date.now()
+    };
+    
+    // Achievement constants
+    private readonly MAX_TEMPORARY_ACHIEVEMENTS = 10;
+    private readonly TEMPORARY_ACHIEVEMENT_LIFETIME = 30000; // 30 seconds
+    private readonly CLEANUP_INTERVAL = 60000; // Clean up every minute
+    
     private stats: PlayerStats = {
         level: 1,
         xp: 0,
@@ -84,6 +113,7 @@ export class GameState {
         
         this.loadStats();
         this.loadEnabledState();
+        this.loadAchievements();
         this.startComboDecaySystem();
     }
 
@@ -215,6 +245,237 @@ export class GameState {
         console.log('CodeQuest: Wizard session manually terminated');
     }
 
+    // ==================== ACHIEVEMENT SYSTEM ====================
+    
+    /**
+     * Add a new achievement to the system
+     */
+    addAchievement(achievement: Omit<Achievement, 'timestamp'>): void {
+        const fullAchievement: Achievement = {
+            ...achievement,
+            timestamp: Date.now()
+        };
+
+        if (achievement.type === 'temporary') {
+            // Add to temporary achievements
+            this.achievements.temporaryAchievements.push(fullAchievement);
+            
+            // Ensure we don't exceed max temporary achievements
+            while (this.achievements.temporaryAchievements.length > this.MAX_TEMPORARY_ACHIEVEMENTS) {
+                this.achievements.temporaryAchievements.shift(); // Remove oldest
+            }
+        } else {
+            // Check if permanent achievement already exists
+            const exists = this.achievements.permanentAchievements.some(a => a.id === achievement.id);
+            if (!exists) {
+                this.achievements.permanentAchievements.push(fullAchievement);
+            }
+        }
+
+        this.saveAchievements();
+        
+        // Trigger UI refresh
+        if (this.refreshCallback) {
+            this.refreshCallback();
+        }
+    }
+
+    /**
+     * Get all achievements (temporary and permanent)
+     */
+    getAchievements(): AchievementStorage {
+        this.cleanupExpiredAchievements();
+        return {
+            temporaryAchievements: [...this.achievements.temporaryAchievements],
+            permanentAchievements: [...this.achievements.permanentAchievements],
+            lastCleanup: this.achievements.lastCleanup
+        };
+    }
+
+    /**
+     * Get achievements for display (limited and sorted)
+     */
+    getAchievementsForDisplay(): { temporary: Achievement[], permanent: Achievement[] } {
+        this.cleanupExpiredAchievements();
+        
+        // Get the most recent temporary achievements (max 10)
+        const temporary = this.achievements.temporaryAchievements
+            .slice(-this.MAX_TEMPORARY_ACHIEVEMENTS)
+            .reverse(); // Show newest first
+
+        // Get the most recent permanent achievements (max 20)
+        const permanent = this.achievements.permanentAchievements
+            .slice(-20)
+            .reverse(); // Show newest first
+
+        return { temporary, permanent };
+    }
+
+    /**
+     * Clean up expired temporary achievements
+     */
+    private cleanupExpiredAchievements(): void {
+        const now = Date.now();
+        
+        // Only clean up if enough time has passed
+        if (now - this.achievements.lastCleanup < this.CLEANUP_INTERVAL) {
+            return;
+        }
+
+        const before = this.achievements.temporaryAchievements.length;
+        this.achievements.temporaryAchievements = this.achievements.temporaryAchievements
+            .filter(achievement => now - achievement.timestamp < this.TEMPORARY_ACHIEVEMENT_LIFETIME);
+        
+        this.achievements.lastCleanup = now;
+        
+        // Only save if we removed achievements
+        if (before !== this.achievements.temporaryAchievements.length) {
+            this.saveAchievements();
+        }
+    }
+
+    /**
+     * Helper methods for common achievement types
+     */
+    addLevelUpAchievement(level: number): void {
+        let title = `Level ${level}!`;
+        let icon = '🎉';
+        let category: Achievement['category'] = 'level';
+
+        // Special level milestones get permanent achievements
+        if (level === 10) {
+            icon = '⭐';
+            title = 'Expert Rank Achieved!';
+            this.addAchievement({
+                id: `level_expert_${level}`,
+                title,
+                description: `Reached level ${level} - You're becoming a coding expert!`,
+                icon,
+                type: 'permanent',
+                category
+            });
+        } else if (level === 25) {
+            icon = '💎';
+            title = 'Master Rank Achieved!';
+            this.addAchievement({
+                id: `level_master_${level}`,
+                title,
+                description: `Reached level ${level} - Master-level skills unlocked!`,
+                icon,
+                type: 'permanent',
+                category
+            });
+        } else if (level === 50) {
+            icon = '👑';
+            title = 'Legendary Status!';
+            this.addAchievement({
+                id: `level_legend_${level}`,
+                title,
+                description: `Reached level ${level} - Legendary coder status achieved!`,
+                icon,
+                type: 'permanent',
+                category
+            });
+        } else {
+            // Regular level ups are temporary
+            this.addAchievement({
+                id: `level_up_${Date.now()}`,
+                title,
+                description: `Welcome to level ${level}!`,
+                icon,
+                type: 'temporary',
+                category
+            });
+        }
+    }
+
+    addXpGainAchievement(xpGained: number, source?: string): void {
+        this.addAchievement({
+            id: `xp_gain_${Date.now()}`,
+            title: `+${xpGained} XP`,
+            description: source ? `${source}` : `Gained ${xpGained} experience points`,
+            icon: '✨',
+            type: 'temporary',
+            category: 'milestone',
+            data: { xpGained, source }
+        });
+    }
+
+    addComboAchievement(combo: number): void {
+        let title = `${combo}x Combo!`;
+        let icon = '🔥';
+        let type: Achievement['type'] = 'temporary';
+
+        // Special combo milestones become permanent
+        if (combo >= 100) {
+            icon = '🌟';
+            title = 'Century Combo Master!';
+            type = 'permanent';
+            this.addAchievement({
+                id: `combo_century_${combo}`,
+                title,
+                description: `Achieved a ${combo}x combo - Incredible consistency!`,
+                icon,
+                type,
+                category: 'combo'
+            });
+        } else if (combo >= 50) {
+            icon = '⚡';
+            title = 'Mega Combo!';
+            type = 'permanent';
+            this.addAchievement({
+                id: `combo_mega_${combo}`,
+                title,
+                description: `Achieved a ${combo}x combo - You're on fire!`,
+                icon,
+                type,
+                category: 'combo'
+            });
+        } else if (combo % 10 === 0 && combo >= 20) {
+            // Every 10 combos past 20 gets a temporary achievement
+            this.addAchievement({
+                id: `combo_milestone_${Date.now()}`,
+                title,
+                description: `${combo} consecutive actions - Keep it up!`,
+                icon,
+                type: 'temporary',
+                category: 'combo'
+            });
+        }
+    }
+
+    addBossVictoryAchievement(bossName: string): void {
+        this.addAchievement({
+            id: `boss_victory_${Date.now()}`,
+            title: `${bossName} Defeated!`,
+            description: `Successfully completed the ${bossName} challenge`,
+            icon: '🏆',
+            type: 'permanent',
+            category: 'boss'
+        });
+    }
+
+    /**
+     * Load achievements from storage
+     */
+    private loadAchievements(): void {
+        const stored = this.context.globalState.get<AchievementStorage>('codequest.achievements');
+        if (stored) {
+            this.achievements = {
+                temporaryAchievements: stored.temporaryAchievements || [],
+                permanentAchievements: stored.permanentAchievements || [],
+                lastCleanup: stored.lastCleanup || Date.now()
+            };
+        }
+    }
+
+    /**
+     * Save achievements to storage
+     */
+    private saveAchievements(): void {
+        this.context.globalState.update('codequest.achievements', this.achievements);
+    }
+
     private startComboDecaySystem() {
         // Prevent multiple intervals
         if (this.comboDecayTimer) {
@@ -309,6 +570,11 @@ export class GameState {
         
         this.stats.xp += amount;
         
+        // Add XP gain achievement for significant amounts
+        if (amount >= 10) {
+            this.addXpGainAchievement(amount, reason);
+        }
+        
         // Check for level up
         while (this.stats.xp >= this.stats.xpToNextLevel) {
             this.levelUp();
@@ -317,15 +583,16 @@ export class GameState {
         this.markStatsDirty();
         this.saveStats();
         
-        if (amount > 0) {
-            vscode.window.showInformationMessage(`⭐ +${amount} XP ${reason}`);
-        }
+        // XP notifications now handled by achievement system only
     }
 
     private levelUp() {
         this.stats.xp -= this.stats.xpToNextLevel;
         this.stats.level++;
         this.stats.xpToNextLevel = Math.floor(this.stats.xpToNextLevel * 1.5);
+        
+        // Add level up achievement
+        this.addLevelUpAchievement(this.stats.level);
         
         // Enhanced level up messages with achievements - add to tree view instead of notifications
         let achievementLabel = '';
@@ -347,7 +614,7 @@ export class GameState {
             achievementLabel = `🎉 LEVEL UP! Welcome to Level ${this.stats.level}!`;
         }
         
-        // Achievement system removed - tree view deleted
+        // Achievement system now integrated above
     }
 
     incrementCombo() {
@@ -419,10 +686,12 @@ export class GameState {
         this.saveStats();
     }
 
-    // Optimize combo milestone handling - tree view removed
+    // Optimize combo milestone handling with achievement integration
     private handleComboMilestones() {
         const combo = this.stats.combo;
-        // Achievement system removed - no tree view
+        
+        // Add combo achievements for milestones
+        this.addComboAchievement(combo);
     }
 
     breakCombo() {
@@ -454,7 +723,7 @@ export class GameState {
         if (!this.enabled) return; // Skip if extension is disabled
         
         this.addXP(Math.floor(lines * 0.5), '(summoned help)');
-        vscode.window.showInformationMessage(`🧙‍♂️ You summoned help! +${Math.floor(lines * 0.5)} XP`);
+        // Notification now handled by achievement system
         this.breakCombo();
     }
 
@@ -527,7 +796,8 @@ export class GameState {
             this.stats.bossBattlesWon++;
             this.addXP(xpReward, `(Boss Battle: ${battle.name})`);
             
-            // Achievement system removed - no tree view
+            // Add boss victory achievement
+            this.addBossVictoryAchievement(battle.name);
             
             this.stats.currentBossBattle = undefined;
             this.markStatsDirty();
