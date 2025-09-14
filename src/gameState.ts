@@ -868,7 +868,23 @@ export class GameState {
             maxCombo: 0,
             bossBattlesWon: 0
         };
+        // Also clear achievements when resetting all stats
+        this.clearAchievements();
         this.markStatsDirty();
         this.saveStats();
+    }
+
+    clearAchievements() {
+        this.achievements = {
+            temporaryAchievements: [],
+            permanentAchievements: [],
+            lastCleanup: Date.now()
+        };
+        this.saveAchievements();
+        
+        // Trigger UI refresh to show cleared achievements
+        if (this.refreshCallback) {
+            this.refreshCallback();
+        }
     }
 }

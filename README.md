@@ -24,7 +24,7 @@ Transform your coding into an RPG adventure with levels, streaks, boss battles, 
 5. Select the downloaded `.vsix` file
 6. Restart VS Code
 
-### Option 2: Build from Source
+### Option 2: Build and Install from Source
 1. Clone this repository:
    ```bash
    git clone https://github.com/DiegoPatterson/CodeQuest.git
@@ -34,16 +34,23 @@ Transform your coding into an RPG adventure with levels, streaks, boss battles, 
    ```bash
    npm install
    ```
-3. Build the extension:
+3. Compile the TypeScript code:
    ```bash
    npm run compile
    ```
-4. Package the extension:
+4. Install the VS Code Extension CLI tool globally:
    ```bash
    npm install -g @vscode/vsce
+   ```
+5. Package the extension (allows star activation for performance):
+   ```bash
    vsce package --allow-star-activation
    ```
-5. Install the generated `.vsix` file using Option 1 above
+6. Install the generated `.vsix` file:
+   ```bash
+   code --install-extension codequest-0.0.1.vsix
+   ```
+7. Restart VS Code to activate the extension
 
 ### Option 3: Development Mode
 1. Follow steps 1-3 from Option 2
@@ -64,7 +71,8 @@ Access these via Command Palette (`Ctrl+Shift+P`):
 - `CodeQuest: Start Boss Battle` - Begin a coding challenge
 - `CodeQuest: Complete Boss Battle` - Mark current battle as complete
 - `CodeQuest: Kill Boss Battle` - Cancel current battle
-- `CodeQuest: Reset All Stats` - Clear all progress (use carefully!)
+- `CodeQuest: Reset All Stats` - Clear all progress and achievements (use carefully!)
+- `CodeQuest: Clear Achievements` - Clear only achievements while keeping stats
 - `CodeQuest: Trigger Wizard` - Manually summon the wizard
 - `CodeQuest: Kill Wizard` - Dismiss the wizard
 

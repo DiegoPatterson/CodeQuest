@@ -133,7 +133,12 @@ function registerCommands(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('codequest.resetStats', () => {
             gameState.resetStats();
             sidebarProvider.refresh();
-            vscode.window.showInformationMessage('CodeQuest stats reset!');
+            vscode.window.showInformationMessage('CodeQuest stats and achievements reset!');
+        }),
+        vscode.commands.registerCommand('codequest.clearAchievements', () => {
+            gameState.clearAchievements();
+            sidebarProvider.refresh();
+            vscode.window.showInformationMessage('CodeQuest achievements cleared!');
         }),
         vscode.commands.registerCommand('codequest.triggerWizard', () => {
             gameState.recordWizardActivity();

@@ -42,6 +42,11 @@
         "category": "CodeQuest"
       },
       {
+        "command": "codequest.clearAchievements",
+        "title": "Clear Achievements",
+        "category": "CodeQuest"
+      },
+      {
         "command": "codequest.triggerWizard",
         "title": "Trigger Wizard",
         "category": "CodeQuest"
