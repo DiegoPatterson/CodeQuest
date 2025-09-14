@@ -61,12 +61,12 @@ export class VisualEngine {
     getVisualState(): VisualState {
         // Ensure state is up to date by refreshing it
         this.refreshVisualState();
-        const state = this.visualState;
+        const state = { ...this.visualState };
         console.log('VisualEngine: getVisualState called, returning:', state);
         return state;
     }
 
-    private refreshVisualState(): void {
+    public refreshVisualState(): void {
         const stats = this.gameState.getStats();
         const lastTypingTime = this.gameState.getLastTypingTime();
         const now = Date.now();
@@ -83,12 +83,21 @@ export class VisualEngine {
             console.log('VisualEngine: Boss battle detected!', stats.currentBossBattle);
             this.visualState.playerState = 'boss_battle';
             this.visualState.useImages = true; // Boss battles should show dragon images
+            
+            // Auto-generate boss checkpoints if none exist
+            if (this.visualState.bossCheckpoints.length === 0) {
+                this.generateBossCheckpoints(stats.currentBossBattle);
+            }
         } else if (shouldShowIdle) {
             this.visualState.playerState = 'idle';
             this.visualState.useImages = true;
+            // Clear boss checkpoints when not in boss battle
+            this.visualState.bossCheckpoints = [];
         } else {
             this.visualState.playerState = 'fighting';
             this.visualState.useImages = false; // Fighting will show images in webview regardless
+            // Clear boss checkpoints when not in boss battle
+            this.visualState.bossCheckpoints = [];
         }
         
         // Update wizard presence
@@ -329,6 +338,25 @@ export class VisualEngine {
         this.visualState.bossCheckpoints = checkpoints;
     }
 
+    private generateBossCheckpoints(bossBattle: any): void {
+        const checkpoints: BossCheckpoint[] = [];
+        const totalLines = bossBattle.targetLines;
+        const segments = Math.min(4, Math.max(2, Math.floor(totalLines / 25))); // 2-4 checkpoints based on size
+        
+        for (let i = 1; i <= segments; i++) {
+            const targetLines = Math.floor((totalLines * i) / segments);
+            checkpoints.push({
+                id: `checkpoint-${i}`,
+                description: `Phase ${i}`,
+                targetLines: targetLines,
+                currentLines: Math.min(bossBattle.currentLines, targetLines),
+                completed: bossBattle.currentLines >= targetLines
+            });
+        }
+        
+        this.visualState.bossCheckpoints = checkpoints;
+    }
+
     updateBossCheckpoint(checkpointId: string, completed: boolean): void {
         const checkpoint = this.visualState.bossCheckpoints.find(c => c.id === checkpointId);
         if (checkpoint) {
@@ -362,5 +390,13 @@ export class VisualEngine {
         ];
         
         return aiPatterns.some(pattern => pattern.test(text));
+    }
+    
+    // Add proper cleanup method to prevent memory leaks
+    dispose() {
+        // Clear all references to prevent circular dependencies
+        this.visualState.bossCheckpoints = [];
+        this.currentSlime = undefined;
+        // Don't clear gameState reference as it may be shared
     }
 }

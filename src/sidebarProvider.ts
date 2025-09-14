@@ -18,19 +18,48 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     private lastAnimationTrigger: number = 0;
     private animationCooldown: number = 100; // Minimum 100ms between animations
     private typingVelocityTracker: number[] = [];
+    private readonly MAX_VELOCITY_SAMPLES = 10; // Limit array size
     private lastTypingTime: number = 0;
+    
+    // Disposables for cleanup
+    private disposables: NodeJS.Timeout[] = [];
+    
+    // Cached URIs for performance optimization
+    private cachedImageUris: { [key: string]: string } = {};
+    
+    private initializeCachedUris() {
+        // Pre-cache all image URIs to avoid repeated conversions
+        const imageConfigs = [
+            { key: 'knight_dragon_1', path: ['Assets', 'Boss', 'Knight V Dragon 1.png'] },
+            { key: 'knight_dragon_2', path: ['Assets', 'Boss', 'Knight V Dragon 2.png'] },
+            { key: 'wizard_dragon_1', path: ['Assets', 'AI V Dragon', 'Wizard V Dragon 1.png'] },
+            { key: 'wizard_dragon_2', path: ['Assets', 'AI V Dragon', 'Wizard V Dragon 2.png'] },
+            { key: 'knight_idle_1', path: ['Assets', 'Idle', 'pixel art of a knight 1.png'] },
+            { key: 'knight_idle_2', path: ['Assets', 'Idle', 'pixel art of a knight 2.png'] },
+            { key: 'knight_slime_1', path: ['Assets', 'Slime', 'Knight V Slime 1.png'] },
+            { key: 'knight_slime_2', path: ['Assets', 'Slime', 'Knight V Slime 2.png'] },
+            { key: 'knight_slime_3', path: ['Assets', 'Slime', 'Knight V Slime 3.png'] }
+        ];
+        
+        for (const config of imageConfigs) {
+            if (this._view?.webview) {
+                this.cachedImageUris[config.key] = this._view.webview.asWebviewUri(
+                    vscode.Uri.joinPath(this._extensionUri, ...config.path)
+                ).toString();
+            }
+        }
+    }
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
         private gameState: GameState
     ) { 
-        console.log('CodeQuest: SidebarProvider constructor called');
-        console.log('CodeQuest: Extension URI:', _extensionUri?.toString());
-        console.log('CodeQuest: GameState:', gameState ? 'exists' : 'null');
+        // Remove excessive debug logging for performance
+        // console.log('CodeQuest: SidebarProvider constructor called');
         
         try {
             this.visualEngine = new VisualEngine(gameState);
-            console.log('CodeQuest: VisualEngine created successfully');
+            // console.log('CodeQuest: VisualEngine created successfully');
         } catch (error) {
             console.error('CodeQuest: Error creating VisualEngine:', error);
         }
@@ -56,6 +85,31 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         this.startIdleWizardTimer();
     }
 
+    // Add disposal method for cleanup
+    dispose() {
+        // Clear all timers
+        this.disposables.forEach(timer => clearTimeout(timer));
+        this.disposables = [];
+        
+        if (this.animationTimer) {
+            clearTimeout(this.animationTimer);
+            this.animationTimer = undefined;
+        }
+        
+        if (this.idleWizardTimer) {
+            clearTimeout(this.idleWizardTimer);
+            this.idleWizardTimer = undefined;
+        }
+        
+        // Clean up the view
+        this._view = undefined;
+        
+        // Dispose visual engine to prevent memory leaks
+        if (this.visualEngine) {
+            this.visualEngine.dispose();
+        }
+    }
+
     private startImageAnimation() {
         // Animation is now triggered by typing events, not timers
         // This method is kept for compatibility but does nothing
@@ -67,16 +121,15 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         
         // Rate limiting: prevent animation spam
         if (now - this.lastAnimationTrigger < this.animationCooldown) {
-            console.log('CodeQuest: Animation rate limited, skipping trigger');
-            return;
+            return; // Skip logging for performance
         }
         
         // Track typing velocity to detect AI assistance patterns
         this.typingVelocityTracker.push(now);
         
-        // Keep only last 10 keystrokes for velocity calculation
-        if (this.typingVelocityTracker.length > 10) {
-            this.typingVelocityTracker = this.typingVelocityTracker.slice(-10);
+        // Keep only last MAX_VELOCITY_SAMPLES keystrokes for velocity calculation
+        if (this.typingVelocityTracker.length > this.MAX_VELOCITY_SAMPLES) {
+            this.typingVelocityTracker = this.typingVelocityTracker.slice(-this.MAX_VELOCITY_SAMPLES);
         }
         
         // Calculate WPM if we have enough data points
@@ -98,17 +151,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         // Trigger frame switch for impact effect when typing
         const visualState = this.visualEngine.getVisualState();
         
-        console.log('CodeQuest: triggerImpactFrame - Current state:', visualState.playerState, 'Current frame:', this.animationFrame);
+        // Remove excessive logging for performance in production
+        // console.log('CodeQuest: triggerImpactFrame - Current state:', visualState.playerState, 'Current frame:', this.animationFrame);
         
         if (visualState.playerState === 'boss_battle') {
             // Boss battle: flash to Dragon 2 (frame 1) for impact
             this.animationFrame = 1;
             
             // Return to Dragon 1 (frame 0) after brief flash
-            setTimeout(() => {
+            const flashTimer = setTimeout(() => {
                 this.animationFrame = 0;
                 this.refresh();
             }, 150); // 150ms flash duration
+            this.disposables.push(flashTimer);
         } else if (visualState.playerState === 'fighting') {
             // Combat state: switch between 2 slime images (0, 1)
             const oldFrame = this.animationFrame;
@@ -176,13 +231,19 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     this.refresh();
                     
                     // Turn off wizard after 15 seconds
-                    setTimeout(() => {
+                    const wizardTimer = setTimeout(() => {
                         this.gameState.killWizardSession();
                         this.refresh();
                     }, 15000);
+                    this.disposables.push(wizardTimer);
                 }
                 scheduleNextWizard(); // Schedule the next appearance
             }, randomDelay);
+            
+            // Track this timer for cleanup
+            if (this.idleWizardTimer) {
+                this.disposables.push(this.idleWizardTimer);
+            }
         };
         scheduleNextWizard();
     }
@@ -191,6 +252,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
         console.log('CodeQuest: resolveWebviewView called! This means webview is working!');
         vscode.window.showInformationMessage('🎮 CodeQuest: WebView resolveWebviewView called!');
         this._view = webviewView;
+        
+        // Initialize cached URIs now that webview is available
+        this.initializeCachedUris();
 
         webviewView.webview.options = {
             enableScripts: true,
@@ -234,11 +298,10 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     refresh() {
         if (this._view) {
             console.log('CodeQuest: Refreshing sidebar view...');
-            // Force refresh of visual state before getting HTML
-            this.visualEngine.getVisualState(); // This calls refreshVisualState internally
+            // Get visual state once - this calls refreshVisualState internally
+            const currentVisualState = this.visualEngine.getVisualState();
             
             // Check if player state changed and reset animation frame if needed
-            const currentVisualState = this.visualEngine.getVisualState();
             if (this.lastPlayerState !== currentVisualState.playerState) {
                 console.log('CodeQuest: Player state changed from', this.lastPlayerState, 'to', currentVisualState.playerState);
                 this.animationFrame = 0; // Reset animation frame
@@ -297,43 +360,38 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
             
             // Boss Battle state: choose between knight vs dragon or wizard vs dragon based on AI assistance
             const bossImages = isWizardActive ? [
-                this._view?.webview.asWebviewUri(
-                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'AI V Dragon', 'Wizard V Dragon 1.png')
-                ),
-                this._view?.webview.asWebviewUri(
-                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'AI V Dragon', 'Wizard V Dragon 2.png')
-                )
+                this.cachedImageUris['wizard_dragon_1'],
+                this.cachedImageUris['wizard_dragon_2']
             ] : [
-                this._view?.webview.asWebviewUri(
-                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Boss', 'Knight V Dragon 1.png')
-                ),
-                this._view?.webview.asWebviewUri(
-                    vscode.Uri.joinPath(this._extensionUri, 'Assets', 'Boss', 'Knight V Dragon 2.png')
-                )
+                this.cachedImageUris['knight_dragon_1'],
+                this.cachedImageUris['knight_dragon_2']
             ];
-            currentImage = bossImages[this.animationFrame % 2]?.toString() || '';
-            console.log('CodeQuest: Selected boss image:', currentImage, 'Frame:', this.animationFrame);
-            console.log('CodeQuest: Animation frame:', this.animationFrame);
-            console.log('CodeQuest: Boss images array:', bossImages.map(img => img?.toString()));
-            console.log('CodeQuest: Selected boss image:', currentImage);
+            currentImage = bossImages[this.animationFrame % 2] || '';
+            // Remove excessive debug logging for performance
+            // console.log('CodeQuest: Selected boss image:', currentImage, 'Frame:', this.animationFrame);
             
             // Calculate progress percentage
             const progressPercentage = currentBoss ? Math.min(100, (currentBoss.currentLines / currentBoss.targetLines) * 100) : 0;
             
-            // Generate subtasks HTML for boss battles - simplified for new layout
+            // Generate subtasks HTML for boss battles - optimized for performance
             if (currentBoss?.subtasks && currentBoss.subtasks.length > 0) {
-                imageSection = `
-                    <div class="boss-section">
-                        <h4 style="margin: 0 0 10px 0; color: #fff;">📋 Subtasks:</h4>
-                        ${currentBoss.subtasks.map((subtask: any) => `
+                // More efficient: direct string concatenation without intermediate array
+                let subtasksHtml = '';
+                for (const subtask of currentBoss.subtasks) {
+                    subtasksHtml += `
                             <div class="subtask">
                                 <input type="checkbox" 
                                        id="${subtask.id}" 
                                        ${subtask.completed ? 'checked' : ''} 
                                        onchange="toggleSubtask('${subtask.id}')" />
                                 <label for="${subtask.id}">${subtask.description}</label>
-                            </div>
-                        `).join('')}
+                            </div>`;
+                }
+                
+                imageSection = `
+                    <div class="boss-section">
+                        <h4 style="margin: 0 0 10px 0; color: #fff;">📋 Subtasks:</h4>
+                        ${subtasksHtml}
                     </div>
                 `;
             } else {
@@ -567,26 +625,29 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     // Add to container
                     container.appendChild(multiplier);
                     
-                    // Add shake effect to knight image
+                    // Add shake effect to knight image with proper cleanup
                     if (knightImage) {
                         knightImage.classList.add('shake');
-                        setTimeout(() => {
+                        const shakeTimer = setTimeout(() => {
                             knightImage.classList.remove('shake');
                         }, 500);
+                        this.disposables.push(shakeTimer);
                     }
                     
-                    // Remove this multiplier after 4 seconds (longer linger time)
-                    setTimeout(() => {
+                    // Remove this multiplier after 4 seconds with efficient cleanup
+                    const fadeTimer = setTimeout(() => {
                         if (multiplier.parentNode) {
                             multiplier.style.opacity = '0';
                             multiplier.style.transform = multiplier.style.transform + ' scale(0.3)';
-                            setTimeout(() => {
+                            const removeTimer = setTimeout(() => {
                                 if (multiplier.parentNode) {
                                     container.removeChild(multiplier);
                                 }
                             }, 300);
+                            this.disposables.push(removeTimer);
                         }
                     }, 4000);
+                    this.disposables.push(fadeTimer);
                     break;
                 case 'hideMultiplier':
                     // Clear all multipliers (if needed for manual clearing)

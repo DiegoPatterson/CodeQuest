@@ -131,12 +131,14 @@ export function activate(context: vscode.ExtensionContext) {
         })
     );
 
-    // Daily streak check
-    setInterval(() => {
+    // Daily streak check - optimize interval
+    const dailyStreakCheck = setInterval(() => {
         gameState.checkDailyStreak();
         sidebarProvider.refresh();
         treeProvider.refresh();
-    }, 60000); // Check every minute
+    }, 300000); // Check every 5 minutes instead of every minute
+    
+    context.subscriptions.push({ dispose: () => clearInterval(dailyStreakCheck) });
 
     console.log('CodeQuest: Fully activated');
     vscode.window.showInformationMessage('🎮 CodeQuest activated! Start your coding adventure!');
@@ -294,8 +296,20 @@ function setupAIDetection(context: vscode.ExtensionContext, gameState: GameState
 }
 
 export function deactivate() {
-    console.log('CodeQuest: Extension deactivated');
+    console.log('CodeQuest: Extension deactivating...');
+    
+    // Clean up resources
+    if (gameState) {
+        gameState.dispose();
+    }
+    
+    if (sidebarProvider) {
+        sidebarProvider.dispose();
+    }
+    
     if (treeProvider && typeof treeProvider.dispose === 'function') {
         treeProvider.dispose();
     }
+    
+    console.log('CodeQuest: Extension deactivated');
 }

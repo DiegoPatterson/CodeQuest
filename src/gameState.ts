@@ -41,12 +41,21 @@ export class GameState {
     private lastComboIncrement: number = 0;
     private comboIncrementCooldown: number = 50; // Minimum 50ms between combo increments
     private recentIncrements: number[] = [];
+    private readonly MAX_RECENT_INCREMENTS = 20; // Limit array size for memory
     
     // Wizard session tracking
     private wizardSessions: number = 0;
     private lastWizardActivity: number = 0;
     private wizardSessionActive: boolean = false;
     private readonly WIZARD_SESSION_TIMEOUT = 5000; // 5 seconds
+    
+    // Performance optimization: Cache stats object and only create new one when needed
+    private _cachedStats: PlayerStats | null = null;
+    private _statsDirty: boolean = true;
+    
+    // Disposables for proper cleanup
+    private disposables: NodeJS.Timeout[] = [];
+    
     private stats: PlayerStats = {
         level: 1,
         xp: 0,
@@ -64,6 +73,23 @@ export class GameState {
         this.loadStats();
         this.loadEnabledState();
         this.startComboDecaySystem();
+    }
+
+    // Add proper cleanup method
+    dispose() {
+        // Clear all timers
+        this.disposables.forEach(timer => clearTimeout(timer));
+        this.disposables = [];
+        
+        if (this.comboDecayTimer) {
+            clearInterval(this.comboDecayTimer);
+            this.comboDecayTimer = null;
+        }
+        
+        // Clear callbacks to prevent memory leaks
+        this.refreshCallback = null;
+        this.multiplierCallback = null;
+        this.impactFrameCallback = null;
     }
 
     setRefreshCallback(callback: () => void) {
@@ -132,10 +158,9 @@ export class GameState {
         // Check if wizard session has timed out
         if (this.wizardSessionActive && (currentTime - this.lastWizardActivity) > this.WIZARD_SESSION_TIMEOUT) {
             this.wizardSessionActive = false;
-            console.log('CodeQuest: Wizard session timed out');
+            // Only log on timeout, not every check for performance
         }
         
-        console.log('CodeQuest: isWizardActive check - Active:', this.wizardSessionActive, 'Time since last activity:', currentTime - this.lastWizardActivity);
         return this.wizardSessionActive;
     }
 
@@ -154,14 +179,20 @@ export class GameState {
     }
 
     private startComboDecaySystem() {
+        // Prevent multiple intervals
+        if (this.comboDecayTimer) {
+            clearInterval(this.comboDecayTimer);
+        }
+        
         // Start combo decay timer - combo decays faster now (every 3 seconds instead of longer)
-        setInterval(() => {
+        this.comboDecayTimer = setInterval(() => {
             const now = Date.now();
             // If user hasn't typed for 3 seconds, start reducing combo
             if (this.lastTypingTime > 0 && now - this.lastTypingTime > 3000) {
                 if (this.stats.combo > 0) {
                     console.log(`CodeQuest: Combo decaying from ${this.stats.combo} to ${this.stats.combo - 1}`);
                     this.stats.combo = Math.max(0, this.stats.combo - 1);
+                    this.markStatsDirty();
                     this.saveStats();
                     
                     // Trigger UI refresh when combo changes
@@ -194,14 +225,30 @@ export class GameState {
             maxCombo: 0,
             bossBattlesWon: 0
         };
+        this.markStatsDirty();
+    }
+
+    // Performance optimization: Mark stats as dirty and cache invalidation
+    private markStatsDirty() {
+        this._statsDirty = true;
+        this._cachedStats = null;
     }
 
     private saveStats() {
         this.context.globalState.update('codequest.stats', this.stats);
+        this.markStatsDirty(); // Invalidate cache when stats change
     }
 
     getStats(): PlayerStats {
-        return { ...this.stats };
+        // Performance optimization: Return cached stats if available
+        if (!this._statsDirty && this._cachedStats) {
+            return this._cachedStats;
+        }
+        
+        // Create a deep copy to prevent external modifications
+        this._cachedStats = { ...this.stats };
+        this._statsDirty = false;
+        return this._cachedStats;
     }
 
     addXP(amount: number, reason: string = '') {
@@ -214,6 +261,7 @@ export class GameState {
             this.levelUp();
         }
         
+        this.markStatsDirty();
         this.saveStats();
         
         if (amount > 0) {
@@ -261,9 +309,9 @@ export class GameState {
         // Track recent increments to detect bulk operations
         this.recentIncrements.push(now);
         
-        // Keep only last 20 increments for analysis
-        if (this.recentIncrements.length > 20) {
-            this.recentIncrements = this.recentIncrements.slice(-20);
+        // Optimize: Keep only last MAX_RECENT_INCREMENTS for analysis
+        if (this.recentIncrements.length > this.MAX_RECENT_INCREMENTS) {
+            this.recentIncrements = this.recentIncrements.slice(-this.MAX_RECENT_INCREMENTS);
         }
         
         // If too many increments in short time, increase cooldown (likely large paste/AI)
@@ -295,16 +343,8 @@ export class GameState {
             this.multiplierCallback(this.stats.combo);
         }
         
-        // Special combo milestone notifications
-        if (this.stats.combo === 10) {
-            vscode.window.showInformationMessage(`🔥 HOT STREAK! 10x combo achieved!`);
-        } else if (this.stats.combo === 25) {
-            vscode.window.showInformationMessage(`⚡ SUPER COMBO! 25x combo - You're on fire!`);
-        } else if (this.stats.combo === 50) {
-            vscode.window.showInformationMessage(`🌟 MEGA COMBO! 50x combo - UNSTOPPABLE!`);
-        } else if (this.stats.combo === 100) {
-            vscode.window.showInformationMessage(`💫 LEGENDARY COMBO! 100x combo - CODING MASTER!`);
-        }
+        // Special combo milestone notifications - batch these to reduce overhead
+        this.handleComboMilestones();
         
         // Combo bonuses - more frequent and varied
         if (this.stats.combo % 5 === 0 && this.stats.combo >= 5) {
@@ -312,7 +352,28 @@ export class GameState {
             this.addXP(bonusXP, `(${this.stats.combo}x combo bonus!)`);
         }
         
+        this.markStatsDirty();
         this.saveStats();
+    }
+
+    // Optimize combo milestone handling
+    private handleComboMilestones() {
+        const combo = this.stats.combo;
+        let message = '';
+        
+        if (combo === 10) {
+            message = `🔥 HOT STREAK! 10x combo achieved!`;
+        } else if (combo === 25) {
+            message = `⚡ SUPER COMBO! 25x combo - You're on fire!`;
+        } else if (combo === 50) {
+            message = `🌟 MEGA COMBO! 50x combo - UNSTOPPABLE!`;
+        } else if (combo === 100) {
+            message = `💫 LEGENDARY COMBO! 100x combo - CODING MASTER!`;
+        }
+        
+        if (message) {
+            vscode.window.showInformationMessage(message);
+        }
     }
 
     breakCombo() {
@@ -320,6 +381,7 @@ export class GameState {
             vscode.window.showWarningMessage(`💥 Combo broken at ${this.stats.combo}x!`);
         }
         this.stats.combo = 0;
+        this.markStatsDirty();
         this.saveStats();
     }
 
@@ -337,6 +399,7 @@ export class GameState {
             // Note: Boss battle completion is now manual only - no auto-completion
         }
         
+        this.markStatsDirty();
         this.saveStats();
     }
 
@@ -368,6 +431,7 @@ export class GameState {
         };
         console.log('GameState: Boss battle started!');
         console.log('GameState: Boss battle details:', this.stats.currentBossBattle);
+        this.markStatsDirty();
         this.saveStats();
     }
 
@@ -377,6 +441,7 @@ export class GameState {
             if (subtask) {
                 subtask.completed = !subtask.completed;
                 console.log(`GameState: Toggled subtask "${subtask.description}" to ${subtask.completed ? 'completed' : 'incomplete'}`);
+                this.markStatsDirty();
                 this.saveStats();
             }
         }
@@ -395,11 +460,14 @@ export class GameState {
         if (this.stats.currentBossBattle && !this.stats.currentBossBattle.completed) {
             // Check if all subtasks are completed
             if (!this.canCompleteBossBattle()) {
-                const incompleteSubtasks = this.stats.currentBossBattle.subtasks
-                    .filter(st => !st.completed)
-                    .map(st => st.description)
-                    .join(', ');
-                vscode.window.showWarningMessage(`❌ Cannot complete boss battle! Please finish these subtasks first: ${incompleteSubtasks}`);
+                // More efficient: single pass through subtasks
+                const incompleteSubtasks: string[] = [];
+                for (const subtask of this.stats.currentBossBattle.subtasks) {
+                    if (!subtask.completed) {
+                        incompleteSubtasks.push(subtask.description);
+                    }
+                }
+                vscode.window.showWarningMessage(`❌ Cannot complete boss battle! Please finish these subtasks first: ${incompleteSubtasks.join(', ')}`);
                 return;
             }
             
@@ -415,6 +483,7 @@ export class GameState {
             vscode.window.showInformationMessage(`⚔️ Boss Battle Complete! Defeated: ${battle.name}`);
             
             this.stats.currentBossBattle = undefined;
+            this.markStatsDirty();
             this.saveStats();
         }
     }
@@ -423,6 +492,7 @@ export class GameState {
         if (this.stats.currentBossBattle) {
             const battleName = this.stats.currentBossBattle.name;
             this.stats.currentBossBattle = undefined;
+            this.markStatsDirty();
             this.saveStats();
             vscode.window.showInformationMessage(`🚫 Boss Battle Cancelled: ${battleName}`);
         } else {
@@ -456,6 +526,7 @@ export class GameState {
             if (this.stats.dailyStreak > 0) {
                 vscode.window.showWarningMessage(`💔 Daily streak lost! (${this.stats.dailyStreak} days)`);
                 this.stats.dailyStreak = 0;
+                this.markStatsDirty();
                 this.saveStats();
             }
         }
@@ -473,6 +544,7 @@ export class GameState {
             maxCombo: 0,
             bossBattlesWon: 0
         };
+        this.markStatsDirty();
         this.saveStats();
     }
 }
