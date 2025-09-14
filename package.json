@@ -70,11 +70,6 @@
     "views": {
       "codequest": [
         {
-          "id": "codequest.sidebar",
-          "name": "📊 Game Stats",
-          "when": "true"
-        },
-        {
           "id": "codequest.webview",
           "name": "🖼️ Knight Display",
           "type": "webview",

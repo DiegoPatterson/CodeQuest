@@ -37,11 +37,14 @@ export class GameState {
     private impactFrameCallback: (() => void) | null = null;
     private enabled: boolean = true; // Extension enabled state
     
-    // Rate limiting for combo increments
+    // Rate limiting for combo increments - Memory optimized with circular buffer
     private lastComboIncrement: number = 0;
     private comboIncrementCooldown: number = 50; // Minimum 50ms between combo increments
-    private recentIncrements: number[] = [];
-    private readonly MAX_RECENT_INCREMENTS = 20; // Limit array size for memory
+    
+    // Memory-efficient circular buffer for recent increments
+    private recentIncrements: Float64Array;
+    private recentIncrementsIndex: number = 0;
+    private readonly MAX_RECENT_INCREMENTS = 20;
     
     // Wizard session tracking
     private wizardSessions: number = 0;
@@ -49,12 +52,16 @@ export class GameState {
     private wizardSessionActive: boolean = false;
     private readonly WIZARD_SESSION_TIMEOUT = 5000; // 5 seconds
     
-    // Performance optimization: Cache stats object and only create new one when needed
+    // Performance optimization: Object pooling for stats
     private _cachedStats: PlayerStats | null = null;
     private _statsDirty: boolean = true;
+    private static _statsPool: PlayerStats[] = []; // Static pool for reuse
     
-    // Disposables for proper cleanup
-    private disposables: NodeJS.Timeout[] = [];
+    // Memory-efficient disposables management
+    private disposables: Set<NodeJS.Timeout> = new Set();
+    
+    // Memory optimization: Reduce object allocations
+    private _tempDate: Date = new Date(); // Reuse date object
     
     private stats: PlayerStats = {
         level: 1,
@@ -70,6 +77,11 @@ export class GameState {
 
     constructor(context: vscode.ExtensionContext) {
         this.context = context;
+        
+        // Initialize memory-efficient data structures
+        this.recentIncrements = new Float64Array(this.MAX_RECENT_INCREMENTS);
+        this.disposables = new Set();
+        
         this.loadStats();
         this.loadEnabledState();
         this.startComboDecaySystem();
@@ -77,9 +89,9 @@ export class GameState {
 
     // Add proper cleanup method
     dispose() {
-        // Clear all timers
+        // Clear all timers efficiently
         this.disposables.forEach(timer => clearTimeout(timer));
-        this.disposables = [];
+        this.disposables.clear();
         
         if (this.comboDecayTimer) {
             clearInterval(this.comboDecayTimer);
@@ -90,6 +102,31 @@ export class GameState {
         this.refreshCallback = null;
         this.multiplierCallback = null;
         this.impactFrameCallback = null;
+        
+        // Return cached stats to pool
+        this.returnStatsToPool();
+    }
+
+    // Memory optimization: Object pooling for stats
+    private returnStatsToPool() {
+        if (this._cachedStats && GameState._statsPool.length < 5) {
+            // Reset stats object for reuse
+            Object.assign(this._cachedStats, {
+                level: 1, xp: 0, xpToNextLevel: 100, dailyStreak: 0,
+                lastActiveDate: '', totalLinesWritten: 0, combo: 0,
+                maxCombo: 0, bossBattlesWon: 0, currentBossBattle: undefined
+            });
+            GameState._statsPool.push(this._cachedStats);
+        }
+        this._cachedStats = null;
+    }
+
+    private getPooledStats(): PlayerStats {
+        return GameState._statsPool.pop() || {
+            level: 1, xp: 0, xpToNextLevel: 100, dailyStreak: 0,
+            lastActiveDate: '', totalLinesWritten: 0, combo: 0,
+            maxCombo: 0, bossBattlesWon: 0
+        };
     }
 
     setRefreshCallback(callback: () => void) {
@@ -226,6 +263,9 @@ export class GameState {
             bossBattlesWon: 0
         };
         this.markStatsDirty();
+        
+        // Initialize date object for reuse
+        this._tempDate.setTime(Date.now());
     }
 
     // Performance optimization: Mark stats as dirty and cache invalidation
@@ -245,8 +285,21 @@ export class GameState {
             return this._cachedStats;
         }
         
-        // Create a deep copy to prevent external modifications
-        this._cachedStats = { ...this.stats };
+        // Get stats object from pool or create new one
+        this._cachedStats = this.getPooledStats();
+        
+        // Copy current stats to cached object (avoid object spread for performance)
+        this._cachedStats.level = this.stats.level;
+        this._cachedStats.xp = this.stats.xp;
+        this._cachedStats.xpToNextLevel = this.stats.xpToNextLevel;
+        this._cachedStats.dailyStreak = this.stats.dailyStreak;
+        this._cachedStats.lastActiveDate = this.stats.lastActiveDate;
+        this._cachedStats.totalLinesWritten = this.stats.totalLinesWritten;
+        this._cachedStats.combo = this.stats.combo;
+        this._cachedStats.maxCombo = this.stats.maxCombo;
+        this._cachedStats.bossBattlesWon = this.stats.bossBattlesWon;
+        this._cachedStats.currentBossBattle = this.stats.currentBossBattle;
+        
         this._statsDirty = false;
         return this._cachedStats;
     }
@@ -274,25 +327,27 @@ export class GameState {
         this.stats.level++;
         this.stats.xpToNextLevel = Math.floor(this.stats.xpToNextLevel * 1.5);
         
-        // Enhanced level up messages with achievements
-        let message = `🎉 LEVEL UP! Welcome to Level ${this.stats.level}!`;
+        // Enhanced level up messages with achievements - add to tree view instead of notifications
+        let achievementLabel = '';
         let extraReward = '';
         
         if (this.stats.level === 10) {
-            message = `⭐ EXPERT RANK ACHIEVED! Level ${this.stats.level} reached!`;
+            achievementLabel = `⭐ EXPERT RANK ACHIEVED! Level ${this.stats.level}`;
             extraReward = ' +50 Bonus XP!';
             this.stats.xp += 50;
         } else if (this.stats.level === 25) {
-            message = `💎 MASTER RANK ACHIEVED! Level ${this.stats.level} reached!`;
+            achievementLabel = `💎 MASTER RANK ACHIEVED! Level ${this.stats.level}`;
             extraReward = ' +100 Bonus XP!';
             this.stats.xp += 100;
         } else if (this.stats.level === 50) {
-            message = `👑 LEGENDARY STATUS! Level ${this.stats.level} - You are a coding legend!`;
+            achievementLabel = `👑 LEGENDARY STATUS! Level ${this.stats.level}`;
             extraReward = ' +250 Bonus XP!';
             this.stats.xp += 250;
+        } else {
+            achievementLabel = `🎉 LEVEL UP! Welcome to Level ${this.stats.level}!`;
         }
         
-        vscode.window.showInformationMessage(message + extraReward);
+        // Achievement system removed - tree view deleted
     }
 
     incrementCombo() {
@@ -306,17 +361,25 @@ export class GameState {
             return;
         }
         
-        // Track recent increments to detect bulk operations
-        this.recentIncrements.push(now);
+        // Track recent increments using circular buffer for memory efficiency
+        this.recentIncrements[this.recentIncrementsIndex] = now;
+        this.recentIncrementsIndex = (this.recentIncrementsIndex + 1) % this.MAX_RECENT_INCREMENTS;
         
-        // Optimize: Keep only last MAX_RECENT_INCREMENTS for analysis
-        if (this.recentIncrements.length > this.MAX_RECENT_INCREMENTS) {
-            this.recentIncrements = this.recentIncrements.slice(-this.MAX_RECENT_INCREMENTS);
+        // Count valid entries in circular buffer (non-zero timestamps)
+        let validIncrements = 0;
+        let oldestTime = now;
+        for (let i = 0; i < this.MAX_RECENT_INCREMENTS; i++) {
+            if (this.recentIncrements[i] > 0) {
+                validIncrements++;
+                if (this.recentIncrements[i] < oldestTime) {
+                    oldestTime = this.recentIncrements[i];
+                }
+            }
         }
         
         // If too many increments in short time, increase cooldown (likely large paste/AI)
-        if (this.recentIncrements.length >= 10) {
-            const timeSpan = now - this.recentIncrements[0];
+        if (validIncrements >= 10) {
+            const timeSpan = now - oldestTime;
             if (timeSpan < 2000) { // 10+ increments in 2 seconds
                 this.comboIncrementCooldown = 200; // Increase cooldown significantly
                 console.log('CodeQuest: Bulk operation detected, increasing combo cooldown');
@@ -338,8 +401,8 @@ export class GameState {
             this.impactFrameCallback();
         }
         
-        // Trigger multiplier display
-        if (this.multiplierCallback && this.stats.combo >= 5) {
+        // Trigger multiplier display on every combo increment for visual feedback
+        if (this.multiplierCallback) {
             this.multiplierCallback(this.stats.combo);
         }
         
@@ -356,30 +419,14 @@ export class GameState {
         this.saveStats();
     }
 
-    // Optimize combo milestone handling
+    // Optimize combo milestone handling - tree view removed
     private handleComboMilestones() {
         const combo = this.stats.combo;
-        let message = '';
-        
-        if (combo === 10) {
-            message = `🔥 HOT STREAK! 10x combo achieved!`;
-        } else if (combo === 25) {
-            message = `⚡ SUPER COMBO! 25x combo - You're on fire!`;
-        } else if (combo === 50) {
-            message = `🌟 MEGA COMBO! 50x combo - UNSTOPPABLE!`;
-        } else if (combo === 100) {
-            message = `💫 LEGENDARY COMBO! 100x combo - CODING MASTER!`;
-        }
-        
-        if (message) {
-            vscode.window.showInformationMessage(message);
-        }
+        // Achievement system removed - no tree view
     }
 
     breakCombo() {
-        if (this.stats.combo > 5) {
-            vscode.window.showWarningMessage(`💥 Combo broken at ${this.stats.combo}x!`);
-        }
+        // Achievement system removed - no tree view
         this.stats.combo = 0;
         this.markStatsDirty();
         this.saveStats();
@@ -480,7 +527,7 @@ export class GameState {
             this.stats.bossBattlesWon++;
             this.addXP(xpReward, `(Boss Battle: ${battle.name})`);
             
-            vscode.window.showInformationMessage(`⚔️ Boss Battle Complete! Defeated: ${battle.name}`);
+            // Achievement system removed - no tree view
             
             this.stats.currentBossBattle = undefined;
             this.markStatsDirty();
@@ -501,30 +548,37 @@ export class GameState {
     }
 
     private updateDailyActivity() {
-        const today = new Date().toDateString();
+        // Memory optimization: Reuse date object
+        this._tempDate.setTime(Date.now());
+        const today = this._tempDate.toDateString();
+        
         if (this.stats.lastActiveDate !== today) {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
+            this._tempDate.setDate(this._tempDate.getDate() - 1);
+            const yesterday = this._tempDate.toDateString();
             
-            if (this.stats.lastActiveDate === yesterday.toDateString()) {
+            if (this.stats.lastActiveDate === yesterday) {
                 this.stats.dailyStreak++;
             } else {
                 this.stats.dailyStreak = 1;
             }
             
             this.stats.lastActiveDate = today;
-            vscode.window.showInformationMessage(`🔥 Daily streak: ${this.stats.dailyStreak} days!`);
+            
+            // Achievement system removed - no tree view
         }
     }
 
     checkDailyStreak() {
-        const today = new Date().toDateString();
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
+        // Memory optimization: Reuse date object
+        this._tempDate.setTime(Date.now());
+        const today = this._tempDate.toDateString();
         
-        if (this.stats.lastActiveDate !== today && this.stats.lastActiveDate !== yesterday.toDateString()) {
+        this._tempDate.setDate(this._tempDate.getDate() - 1);
+        const yesterday = this._tempDate.toDateString();
+        
+        if (this.stats.lastActiveDate !== today && this.stats.lastActiveDate !== yesterday) {
             if (this.stats.dailyStreak > 0) {
-                vscode.window.showWarningMessage(`💔 Daily streak lost! (${this.stats.dailyStreak} days)`);
+                // Achievement system removed - no tree view
                 this.stats.dailyStreak = 0;
                 this.markStatsDirty();
                 this.saveStats();

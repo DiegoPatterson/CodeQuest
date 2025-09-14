@@ -3,14 +3,15 @@ import { GameState } from './gameState';
 import { SidebarProvider } from './sidebarProvider';
 import { CodeAnalyzer } from './codeAnalyzer';
 import { TestWebviewProvider } from './testWebviewProvider';
-import { GameStatsTreeProvider } from './gameStatsTreeProvider';
 
 let gameState: GameState;
 let sidebarProvider: SidebarProvider;
 let codeAnalyzer: CodeAnalyzer;
-let treeProvider: GameStatsTreeProvider;
 
 export function activate(context: vscode.ExtensionContext) {
+    // Performance profiling: Track activation time
+    const activationStartTime = performance.now();
+    
     console.log('🔥 CodeQuest: Extension activate function called!');
     console.log('🔥 CodeQuest: Extension URI:', context.extensionUri.toString());
     
@@ -19,36 +20,35 @@ export function activate(context: vscode.ExtensionContext) {
     
     console.log('CodeQuest: Extension activating...');
     
+    // Progressive loading: Initialize core components first
+    const gameStateStartTime = performance.now();
     gameState = new GameState(context);
-    console.log('CodeQuest: GameState created');
+    const gameStateTime = performance.now() - gameStateStartTime;
+    console.log(`CodeQuest: GameState created in ${gameStateTime.toFixed(2)}ms`);
     
+    const sidebarStartTime = performance.now();
     sidebarProvider = new SidebarProvider(context.extensionUri, gameState);
-    console.log('CodeQuest: SidebarProvider created');
+    const sidebarTime = performance.now() - sidebarStartTime;
+    console.log(`CodeQuest: SidebarProvider created in ${sidebarTime.toFixed(2)}ms`);
     
-    treeProvider = new GameStatsTreeProvider(gameState);
-    console.log('CodeQuest: TreeProvider created');
-    
-    codeAnalyzer = new CodeAnalyzer(gameState);
-
-    // Set up refresh callback for combo decay
-    gameState.setRefreshCallback(() => {
-        console.log('CodeQuest: Refreshing UI due to combo decay');
-        sidebarProvider.refresh();
-        treeProvider.refresh();
-    });
+    // Defer non-critical component initialization
+    setTimeout(() => {
+        const analyzerStartTime = performance.now();
+        codeAnalyzer = new CodeAnalyzer(gameState);
+        const analyzerTime = performance.now() - analyzerStartTime;
+        console.log(`CodeQuest: CodeAnalyzer created in ${analyzerTime.toFixed(2)}ms (deferred)`);
+        
+        // Set up refresh callback after analyzer is ready
+        gameState.setRefreshCallback(() => {
+            console.log('CodeQuest: Refreshing UI due to combo decay');
+            sidebarProvider.refresh();
+        });
+    }, 10); // Small delay to not block initial activation
 
     console.log('CodeQuest: Created providers');
 
-    // Register tree data provider (this should definitely work)
-    try {
-        const treeView = vscode.window.registerTreeDataProvider('codequest.sidebar', treeProvider);
-        context.subscriptions.push(treeView);
-        console.log('CodeQuest: Successfully registered TreeDataProvider for codequest.sidebar');
-    } catch (error) {
-        console.error('CodeQuest: Failed to register TreeDataProvider:', error);
-    }
-
-    // Register webview provider for knight display
+    // Register webview provider for knight display (critical path)
+    const registrationStartTime = performance.now();
     try {
         console.log(`CodeQuest: Attempting to register webview provider for ${SidebarProvider.viewType}...`);
         const provider = vscode.window.registerWebviewViewProvider(
@@ -61,7 +61,8 @@ export function activate(context: vscode.ExtensionContext) {
             }
         );
         context.subscriptions.push(provider);
-        console.log(`CodeQuest: Successfully registered webview provider for ${SidebarProvider.viewType}`);
+        const registrationTime = performance.now() - registrationStartTime;
+        console.log(`CodeQuest: Successfully registered webview provider in ${registrationTime.toFixed(2)}ms`);
         
         // Force notification to confirm registration
         vscode.window.showInformationMessage(`🔥 WebView Provider REGISTERED for ${SidebarProvider.viewType}!`);
@@ -71,7 +72,48 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.window.showErrorMessage(`CodeQuest webview registration failed: ${error}`);
     }
 
-    // Register commands
+    // Defer command registration to reduce initial activation time
+    setTimeout(() => {
+        const commandStartTime = performance.now();
+        registerCommands(context);
+        const commandTime = performance.now() - commandStartTime;
+        console.log(`CodeQuest: Commands registered in ${commandTime.toFixed(2)}ms (deferred)`);
+    }, 50); // Defer by 50ms
+
+    // Listen to text document changes (defer this too for startup performance)
+    setTimeout(() => {
+        context.subscriptions.push(
+            vscode.workspace.onDidChangeTextDocument((event) => {
+                if (codeAnalyzer) { // Check if analyzer is ready
+                    const analysis = codeAnalyzer.analyzeChange(event);
+                    sidebarProvider.refresh();
+                }
+            })
+        );
+    }, 100);
+
+    // Daily streak check - optimize interval
+    const dailyStreakCheck = setInterval(() => {
+        gameState.checkDailyStreak();
+        sidebarProvider.refresh();
+    }, 300000); // Check every 5 minutes instead of every minute
+    
+    context.subscriptions.push({ dispose: () => clearInterval(dailyStreakCheck) });
+
+    // Final activation time measurement
+    const totalActivationTime = performance.now() - activationStartTime;
+    console.log(`CodeQuest: Total activation time: ${totalActivationTime.toFixed(2)}ms`);
+    console.log('CodeQuest: Fully activated');
+    vscode.window.showInformationMessage('🎮 CodeQuest activated! Start your coding adventure!');
+    
+    // Set up AI detection (deferred for performance)
+    setTimeout(() => {
+        setupAIDetection(context, gameState, sidebarProvider);
+    }, 100);
+}
+
+// Deferred command registration for better startup performance
+function registerCommands(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('codequest.startBossBattle', () => {
             startBossBattle();
@@ -79,72 +121,36 @@ export function activate(context: vscode.ExtensionContext) {
         vscode.commands.registerCommand('codequest.completeBossBattle', () => {
             gameState.completeBossBattle();
             sidebarProvider.refresh();
-            treeProvider.refresh();
         }),
         vscode.commands.registerCommand('codequest.toggleSubtask', (subtaskId: string) => {
             gameState.toggleSubtask(subtaskId);
             sidebarProvider.refresh();
-            treeProvider.refresh();
         }),
         vscode.commands.registerCommand('codequest.killBossBattle', () => {
             gameState.killBossBattle();
             sidebarProvider.refresh();
-            treeProvider.refresh();
         }),
         vscode.commands.registerCommand('codequest.resetStats', () => {
             gameState.resetStats();
             sidebarProvider.refresh();
-            treeProvider.refresh();
             vscode.window.showInformationMessage('CodeQuest stats reset!');
         }),
         vscode.commands.registerCommand('codequest.triggerWizard', () => {
             gameState.recordWizardActivity();
             sidebarProvider.refresh();
-            treeProvider.refresh();
             const wizardStats = gameState.getWizardStats();
             vscode.window.showInformationMessage(`🧙‍♂️ Wizard session activated! Total sessions: ${wizardStats.totalSessions}`);
         }),
         vscode.commands.registerCommand('codequest.killWizard', () => {
             gameState.killWizardSession();
             sidebarProvider.refresh();
-            treeProvider.refresh();
             vscode.window.showInformationMessage('🗡️ Wizard session terminated! Back to knight mode.');
         }),
         vscode.commands.registerCommand('codequest.toggleEnabled', () => {
             const isEnabled = gameState.toggleEnabled();
             sidebarProvider.refresh();
-            treeProvider.refresh();
-            // Message is shown in the toggleEnabled method
         })
     );
-
-    // Listen to text document changes
-    context.subscriptions.push(
-        vscode.workspace.onDidChangeTextDocument((event) => {
-            const analysis = codeAnalyzer.analyzeChange(event);
-            sidebarProvider.refresh();
-            
-            // Pass word counts and AI detection to tree provider for dynamic visuals
-            const wordsTyped = analysis?.wordsAdded || 0;
-            const hasAI = analysis?.aiDetected || false;
-            treeProvider.refresh(wordsTyped, hasAI);
-        })
-    );
-
-    // Daily streak check - optimize interval
-    const dailyStreakCheck = setInterval(() => {
-        gameState.checkDailyStreak();
-        sidebarProvider.refresh();
-        treeProvider.refresh();
-    }, 300000); // Check every 5 minutes instead of every minute
-    
-    context.subscriptions.push({ dispose: () => clearInterval(dailyStreakCheck) });
-
-    console.log('CodeQuest: Fully activated');
-    vscode.window.showInformationMessage('🎮 CodeQuest activated! Start your coding adventure!');
-    
-    // Set up AI detection
-    setupAIDetection(context, gameState, sidebarProvider);
 }
 
 async function startBossBattle() {
@@ -186,7 +192,6 @@ async function startBossBattle() {
     
     gameState.startBossBattle(taskName, subtasks);
     sidebarProvider.refresh();
-    treeProvider.refresh();
     vscode.window.showInformationMessage(`🐉 Boss Battle Started: ${taskName} (${subtasks.length} subtasks)`);
 }
 
@@ -305,10 +310,6 @@ export function deactivate() {
     
     if (sidebarProvider) {
         sidebarProvider.dispose();
-    }
-    
-    if (treeProvider && typeof treeProvider.dispose === 'function') {
-        treeProvider.dispose();
     }
     
     console.log('CodeQuest: Extension deactivated');
