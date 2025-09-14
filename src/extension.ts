@@ -84,7 +84,7 @@ export function activate(context: vscode.ExtensionContext) {
     setTimeout(() => {
         context.subscriptions.push(
             vscode.workspace.onDidChangeTextDocument((event) => {
-                if (codeAnalyzer) { // Check if analyzer is ready
+                if (codeAnalyzer && gameState.isEnabled()) { // Check if analyzer is ready AND extension is enabled
                     const analysis = codeAnalyzer.analyzeChange(event);
                     sidebarProvider.refresh();
                 }
@@ -94,8 +94,10 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Daily streak check - optimize interval
     const dailyStreakCheck = setInterval(() => {
-        gameState.checkDailyStreak();
-        sidebarProvider.refresh();
+        if (gameState.isEnabled()) { // Only check daily streak if extension is enabled
+            gameState.checkDailyStreak();
+            sidebarProvider.refresh();
+        }
     }, 300000); // Check every 5 minutes instead of every minute
     
     context.subscriptions.push({ dispose: () => clearInterval(dailyStreakCheck) });
@@ -116,17 +118,33 @@ export function activate(context: vscode.ExtensionContext) {
 function registerCommands(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('codequest.startBossBattle', () => {
+            if (!gameState.isEnabled()) {
+                vscode.window.showWarningMessage('🛑 CodeQuest is disabled. Enable RPG mode first!');
+                return;
+            }
             startBossBattle();
         }),
         vscode.commands.registerCommand('codequest.completeBossBattle', () => {
+            if (!gameState.isEnabled()) {
+                vscode.window.showWarningMessage('🛑 CodeQuest is disabled. Enable RPG mode first!');
+                return;
+            }
             gameState.completeBossBattle();
             sidebarProvider.refresh();
         }),
         vscode.commands.registerCommand('codequest.toggleSubtask', (subtaskId: string) => {
+            if (!gameState.isEnabled()) {
+                vscode.window.showWarningMessage('🛑 CodeQuest is disabled. Enable RPG mode first!');
+                return;
+            }
             gameState.toggleSubtask(subtaskId);
             sidebarProvider.refresh();
         }),
         vscode.commands.registerCommand('codequest.killBossBattle', () => {
+            if (!gameState.isEnabled()) {
+                vscode.window.showWarningMessage('🛑 CodeQuest is disabled. Enable RPG mode first!');
+                return;
+            }
             gameState.killBossBattle();
             sidebarProvider.refresh();
         }),
@@ -141,12 +159,20 @@ function registerCommands(context: vscode.ExtensionContext) {
             vscode.window.showInformationMessage('CodeQuest achievements cleared!');
         }),
         vscode.commands.registerCommand('codequest.triggerWizard', () => {
+            if (!gameState.isEnabled()) {
+                vscode.window.showWarningMessage('🛑 CodeQuest is disabled. Enable RPG mode first!');
+                return;
+            }
             gameState.recordWizardActivity();
             sidebarProvider.refresh();
             const wizardStats = gameState.getWizardStats();
             vscode.window.showInformationMessage(`🧙‍♂️ Wizard session activated! Total sessions: ${wizardStats.totalSessions}`);
         }),
         vscode.commands.registerCommand('codequest.killWizard', () => {
+            if (!gameState.isEnabled()) {
+                vscode.window.showWarningMessage('🛑 CodeQuest is disabled. Enable RPG mode first!');
+                return;
+            }
             gameState.killWizardSession();
             sidebarProvider.refresh();
             vscode.window.showInformationMessage('🗡️ Wizard session terminated! Back to knight mode.');
@@ -204,6 +230,9 @@ async function startBossBattle() {
 function setupAIDetection(context: vscode.ExtensionContext, gameState: GameState, sidebarProvider: SidebarProvider) {
     // Monitor text document changes for AI assistance patterns
     const textDocumentChangeListener = vscode.workspace.onDidChangeTextDocument((event) => {
+        // Skip AI detection if extension is disabled
+        if (!gameState.isEnabled()) return;
+        
         if (event.contentChanges.length > 0) {
             const change = event.contentChanges[0];
             
@@ -236,6 +265,9 @@ function setupAIDetection(context: vscode.ExtensionContext, gameState: GameState
             '*', // All file types
             {
                 provideCompletionItems(document, position, token, context) {
+                    // Skip completion monitoring if extension is disabled
+                    if (!gameState.isEnabled()) return [];
+                    
                     // This gets called when completions are requested
                     // We can detect when AI completions are being used
                     return [];

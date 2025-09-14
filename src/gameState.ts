@@ -484,6 +484,9 @@ export class GameState {
         
         // Start combo decay timer - combo decays faster now (every 3 seconds instead of longer)
         this.comboDecayTimer = setInterval(() => {
+            // Skip combo decay if extension is disabled
+            if (!this.enabled) return;
+            
             const now = Date.now();
             // If user hasn't typed for 3 seconds, start reducing combo
             if (this.lastTypingTime > 0 && now - this.lastTypingTime > 3000) {

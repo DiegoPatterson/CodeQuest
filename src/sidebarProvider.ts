@@ -356,6 +356,9 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                 case 'resetStats':
                     vscode.commands.executeCommand('codequest.resetStats');
                     break;
+                case 'toggleEnabled':
+                    vscode.commands.executeCommand('codequest.toggleEnabled');
+                    break;
             }
         });
     }
@@ -400,6 +403,11 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
     }
 
     private _getHtmlForWebview() {
+        // Check if extension is disabled and show disabled state
+        if (!this.gameState.isEnabled()) {
+            return this._getDisabledHtml();
+        }
+        
         const stats = this.gameState.getStats();
         const achievements = this.gameState.getAchievementsForDisplay();
         console.log('CodeQuest: Getting stats for HTML:', stats);
@@ -1786,6 +1794,113 @@ export class SidebarProvider implements vscode.WebviewViewProvider {
                     break;
             }
         });
+    </script>
+</body>
+</html>`;
+    }
+
+    private _getDisabledHtml() {
+        return `<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeQuest - Disabled</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #2c3e50, #34495e);
+            color: #ecf0f1;
+            margin: 0;
+            padding: 20px;
+            text-align: center;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .disabled-container {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            max-width: 300px;
+        }
+        
+        .disabled-icon {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.6;
+        }
+        
+        .disabled-title {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 15px;
+            color: #bdc3c7;
+        }
+        
+        .disabled-message {
+            font-size: 1rem;
+            line-height: 1.5;
+            margin-bottom: 25px;
+            color: #95a5a6;
+        }
+        
+        .enable-button {
+            background: linear-gradient(45deg, #27ae60, #2ecc71);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(46, 204, 113, 0.3);
+        }
+        
+        .enable-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(46, 204, 113, 0.4);
+        }
+        
+        .enable-button:active {
+            transform: translateY(0);
+        }
+        
+        .stats-note {
+            font-size: 0.8rem;
+            color: #7f8c8d;
+            margin-top: 20px;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <div class="disabled-container">
+        <div class="disabled-icon">😴</div>
+        <div class="disabled-title">CodeQuest is Sleeping</div>
+        <div class="disabled-message">
+            RPG mode is currently disabled. Your progress is safely saved, but no new XP or achievements will be earned.
+        </div>
+        <button class="enable-button" onclick="enableExtension()">
+            🎮 Enable RPG Mode
+        </button>
+        <div class="stats-note">
+            Your stats and achievements are preserved
+        </div>
+    </div>
+
+    <script>
+        const vscode = acquireVsCodeApi();
+        
+        function enableExtension() {
+            vscode.postMessage({ type: 'toggleEnabled' });
+        }
     </script>
 </body>
 </html>`;
